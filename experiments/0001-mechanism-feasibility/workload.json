@@ -1,0 +1,64 @@
+{
+  "schema_version": 0,
+  "cases": [
+    {
+      "name": "gpu-hit-sanity",
+      "event": {
+        "session_id": "phase0-gpu-hit",
+        "turn_id": 1,
+        "lifecycle_epoch": 1,
+        "prefix_tokens": 8192,
+        "requested_action": "retain",
+        "cache_salt": "phase0-run-001"
+      },
+      "expected_observed_action": "gpu_hit",
+      "required_evidence": [
+        "gpu_hit_tokens",
+        "resume_first_token_ns",
+        "output_token_hash"
+      ]
+    },
+    {
+      "name": "cpu-restore",
+      "event": {
+        "session_id": "phase0-cpu-restore",
+        "turn_id": 1,
+        "lifecycle_epoch": 1,
+        "prefix_tokens": 8192,
+        "requested_action": "offload",
+        "cache_salt": "phase0-run-002"
+      },
+      "expected_observed_action": "cpu_restore",
+      "required_evidence": [
+        "store_start_ns",
+        "store_end_ns",
+        "gpu_miss_tokens",
+        "cpu_hit_tokens",
+        "restore_start_ns",
+        "restore_end_ns",
+        "resume_first_token_ns",
+        "output_token_hash"
+      ]
+    },
+    {
+      "name": "full-recompute",
+      "event": {
+        "session_id": "phase0-recompute",
+        "turn_id": 1,
+        "lifecycle_epoch": 1,
+        "prefix_tokens": 8192,
+        "requested_action": "recompute",
+        "cache_salt": "phase0-run-003"
+      },
+      "expected_observed_action": "recompute",
+      "required_evidence": [
+        "gpu_miss_tokens",
+        "cpu_miss_tokens",
+        "prefill_start_ns",
+        "prefill_end_ns",
+        "resume_first_token_ns",
+        "output_token_hash"
+      ]
+    }
+  ]
+}

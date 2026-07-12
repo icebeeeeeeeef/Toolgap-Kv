@@ -1,0 +1,20 @@
+{
+  "schema_version": 0,
+  "experiment_id": "0001-mechanism-feasibility",
+  "claim_state": "roadmap",
+  "engine": {
+    "name": "vllm",
+    "commit_status": "pending_hook_capability_audit"
+  },
+  "patch": {
+    "status": "none",
+    "directory": "patches"
+  },
+  "environment": {
+    "status": "not_provisioned"
+  },
+  "raw_data": {
+    "status": "not_collected",
+    "directory": "experiments/0001-mechanism-feasibility/raw"
+  }
+}

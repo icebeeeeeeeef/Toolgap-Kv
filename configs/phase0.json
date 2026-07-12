@@ -1,0 +1,35 @@
+{
+  "schema_version": 0,
+  "engine": {
+    "name": "vllm",
+    "pin_status": "pending_hook_capability_audit",
+    "required_capabilities": [
+      "observe_request_completion_and_prefix_reference_release",
+      "trigger_or_observe_cpu_store_completion",
+      "force_gpu_miss_with_cpu_copy_available",
+      "force_gpu_and_cpu_miss",
+      "observe_gpu_hit_cpu_hit_and_recomputed_tokens"
+    ]
+  },
+  "model": {
+    "id": "Qwen/Qwen2.5-7B-Instruct",
+    "revision_status": "pin_on_gpu_environment",
+    "weight_dtype": "bfloat16",
+    "kv_dtype": "bfloat16"
+  },
+  "runtime": {
+    "tensor_parallel_size": 1,
+    "pipeline_parallel_size": 1,
+    "automatic_prefix_caching": true,
+    "speculative_decoding": false,
+    "temperature": 0,
+    "output_tokens": 32
+  },
+  "sweep": {
+    "prefix_tokens": [2048, 8192, 16384],
+    "tool_gap_seconds": [1.0],
+    "variance_pilot_repetitions": 5,
+    "policy_order": "abba_or_seeded_random",
+    "reset_rule": "restart_engine_between_policy_series_and_use_unique_cache_salt"
+  }
+}
