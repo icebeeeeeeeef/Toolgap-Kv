@@ -2,52 +2,68 @@
 
 > Status: `roadmap`
 >
-> Last reviewed: 2026-07-11
+> Last reviewed: 2026-07-22
 >
-> No implementation, GPU result, upstream contribution, or measured resume claim exists yet.
+> Engine-independent Phase 0 contracts, seven domain-contract tests, and three
+> repository-validator regression tests are `shipped` (ten local tests total).
+> A0.1 has one real-GPU, pinned-vLLM `experimentally validated` negative
+> full-block applicability result. No lifecycle runtime, APC/CPU-offload path,
+> measured resume metric, or performance claim exists.
 
 ## One-Sentence Definition
 
-ToolGap-KV is an agent-aware KV-cache lifecycle runtime for vLLM. When an
-agent pauses for a tool call, the runtime chooses whether to retain its KV
-cache in GPU HBM, offload it to a lower tier, or evict it and recompute on
-resume.
+ToolGap-KV is the repository codename for a proposed candidate-owned, in-process
+paused-agent KV lifecycle runtime integrated with current vLLM, plus correctness,
+attribution, and measured retain/offload/recompute boundaries.
 
 The project's central question is:
 
-> Under which hardware-cost ratios, memory-pressure regimes, and tool-gap
-> distributions does a dynamic lifecycle policy outperform a tuned static TTL?
+> Can the smallest candidate-owned lifecycle controller over a maintainable
+> current-vLLM seam make the three paths enforceable, observable, and safe under
+> failure, then measure where each path wins or loses on the available
+> single-node testbed?
+
+Dynamic-policy superiority is a conditional Gate B question, not the project
+success condition.
 
 ## Reading Order
 
-1. [PROJECT.md](PROJECT.md): problem background, first-principles question,
+1. [../../CONTEXT.md](../../CONTEXT.md): canonical domain terms.
+2. [FIRST_PRINCIPLES.md](FIRST_PRINCIPLES.md): recruiting objective, hard gates,
+   decision-card unit, and adopted scope rules.
+3. [PROJECT.md](PROJECT.md): problem background, first-principles question,
    goals, non-goals, and success conditions.
-2. [ARCHITECTURE.md](ARCHITECTURE.md): components, lifecycle state machine,
+4. [ROADMAP.md](ROADMAP.md): Gate A, evidence phases, Gate B, and stop branches.
+5. [../../experiments/0001-mechanism-feasibility/README.md](../../experiments/0001-mechanism-feasibility/README.md):
+   the first executable evidence protocol.
+6. [ARCHITECTURE.md](ARCHITECTURE.md): proposed components, lifecycle contracts,
    decision path, and failure semantics.
-3. [ROADMAP.md](ROADMAP.md): calibration sprint, MVP, research-grade system,
-   and optional distributed extensions.
-4. [EVALUATION.md](EVALUATION.md): hypotheses, baselines, workloads, metrics,
+7. [EVALUATION.md](EVALUATION.md): hypotheses, baselines, workloads, metrics,
    bounds, negative cases, and evidence rules.
-5. [NARRATIVE.md](NARRATIVE.md): candidate story, ownership boundary, interview
+8. [INTERVIEW_MAP.md](INTERVIEW_MAP.md): decision-card registry, organic hooks,
+   claim trees, and evidence gates.
+9. [NARRATIVE.md](NARRATIVE.md): candidate story, ownership boundary, interview
    framing, and resume templates.
-6. [interview-grill/README.md](interview-grill/README.md): adversarial TL
+10. [interview-grill/README.md](interview-grill/README.md): adversarial TL
    questions, evidence-gated answers, and mock-interview maintenance workflow.
-7. [RELATED_WORK.md](RELATED_WORK.md): direct predecessors, adjacent systems,
+11. [RELATED_WORK.md](RELATED_WORK.md): direct predecessors, adjacent systems,
    vLLM status, and fidelity rules.
-8. [DECISIONS.md](DECISIONS.md): accepted, deferred, and rejected decisions.
+12. [DECISIONS.md](DECISIONS.md): accepted, deferred, rejected, and superseded decisions.
 
 ## Current Snapshot
 
 | Dimension | Current state |
 |---|---|
 | Core problem | Defined |
-| Architecture | Roadmap design only |
-| vLLM target commit | Not pinned |
-| Hardware | Not recorded |
+| Engine-independent contracts | `shipped`: events/actions/DecisionTrace scaffolding and tests |
+| Runtime architecture | `roadmap`: proposed only |
+| vLLM target commit | A0.1 only: `752a3a504485790a2e8491cacbb35c137339ad34` (`vLLM 0.25.1`) |
+| Hardware | A0.1 only: NVIDIA A10; driver `580.126.09`; Torch CUDA `13.0` |
 | Workload | Candidate sources identified; no replay built |
-| Runtime code | None |
-| Benchmark data | None |
-| Resume claim | Not allowed yet |
+| Runtime code | `shipped`: engine-independent Phase 0 plus one A0.1 measurement harness; no candidate-owned lifecycle runtime |
+| Benchmark data | `experimentally validated` negative A0.1 artifact, locally retained under `experiments/0001-mechanism-feasibility/raw/a0.1/`; hashes and command are tracked in [A0.1 results](../../experiments/0001-mechanism-feasibility/A0.1-results-2026-07-22.md) |
+| Simulator data | None |
+| Resume claim | No positive runtime or performance bullet allowed; only the narrow A0.1 negative applicability finding may be discussed with its testbed boundary |
 
 ## Core Glossary
 
@@ -60,7 +76,7 @@ The project's central question is:
 | Resume TTFT | Time from tool-result arrival to the first newly generated token |
 | JCT | End-to-end completion time of the full agent job |
 | Goodput@SLO | Completed jobs per unit time that satisfy the declared latency SLO |
-| DecisionTrace | Structured record connecting runtime state, policy choice, and outcome |
+| DecisionTrace | Structured record connecting lifecycle identity, requested action, observed path, fallback, accounting, timing, and outcome |
 | Testbed | The real engine, model, hardware, and workload execution environment |
 | Hindsight bound | Offline comparator with explicitly stated future information and assumptions |
 
@@ -71,7 +87,8 @@ All project claims must use one of these states:
 - `roadmap`: planned but not implemented.
 - `shipped`: implemented and exercised in the stated system.
 - `experimentally validated`: measured under a declared environment and workload.
-- `simulated`: supported only by a trace, model, optimizer, or simulator.
+- `simulated`: supported only by replay, trace, optimizer, cost model, or
+  simulator; calibration limits must be stated.
 
 An artifact can have different states on different axes. For example:
 
@@ -83,7 +100,17 @@ scale: single-node and truncated relative to production
 
 ## Scope Boundary
 
-The mainline owns one mechanism: lifecycle selection for paused agent KV state.
+The mainline owns one bounded evidence chain: a candidate-owned in-process
+lifecycle controller, current-vLLM integration, correctness/fallback, and measured
+retain/offload/recompute boundaries. The controller owns logical identity/epochs,
+legal transitions, idempotence, asynchronous-completion fencing, action
+orchestration, fallback, cancellation, cleanup, and DecisionTrace. A logging-only
+adapter, proxy, or external benchmark is supporting evidence, not the mechanism.
+Dynamic selection is Gate B-only.
+
+vLLM remains the physical KV data plane for shared block residency/refcounts,
+eviction, PagedAttention, model execution, and native D2H/H2D movement. Reusing
+those capabilities is the intended design, not a reduction in candidate ownership.
 
 MVP dependencies and baselines may include vLLM native offload, a static TTL,
 soft retention, and recomputation. The following are not part of the MVP:
@@ -99,20 +126,24 @@ CUDA kernel work
 production-scale claims
 ```
 
-Those items may become independent extensions only after the main hypothesis is
-validated.
+Those items require independent project review even after CT1-CT3 succeed.
 
 ## Maintenance Rules
 
 1. Pin source links, dependency commits, model versions, and hardware manifests.
 2. Add measurements only with the exact command, workload, and raw artifact.
-3. Keep negative results; do not remove workloads where the policy loses.
+3. Keep negative results; do not remove paths or workloads where the mechanism or
+   selected action loses.
 4. Update [DECISIONS.md](DECISIONS.md) when a major scope or mechanism changes.
 5. Update [RELATED_WORK.md](RELATED_WORK.md) before claiming novelty.
 6. Never convert roadmap bullets into resume bullets by changing verb tense.
 
 ## Immediate Next Decision
 
-Run the calibration sprint in [ROADMAP.md](ROADMAP.md). Its purpose is not to
-prove a speedup. It determines whether current vLLM APIs, available hardware,
-and repeatable workloads can support a credible project at all.
+Execute Gate A in [ROADMAP.md](ROADMAP.md). First complete the capability matrix;
+then prove a viable controller seam with one candidate-owned lifecycle transition,
+obtain a pinned-vLLM requested-to-observed nominal raw trace, add one
+source-audited fault/fallback fixture, and close the first decision card. A
+trace-only observer cannot pass the ownership gate. A performance/applicability
+negative case is useful but cannot replace the safety fixture. Gate A's purpose
+is not to prove a speedup.

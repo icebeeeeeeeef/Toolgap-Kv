@@ -1,20 +1,28 @@
 {
   "schema_version": 0,
   "experiment_id": "0001-mechanism-feasibility",
-  "claim_state": "roadmap",
+  "claim_state": "experimentally validated",
+  "result_scope": "A0.1 only: negative full-block applicability result; A0.2 and A1 are blocked",
   "engine": {
     "name": "vllm",
-    "commit_status": "pending_hook_capability_audit"
+    "version": "0.25.1",
+    "commit": "752a3a504485790a2e8491cacbb35c137339ad34",
+    "commit_status": "pinned_for_A0.1_only"
   },
   "patch": {
     "status": "none",
     "directory": "patches"
   },
   "environment": {
-    "status": "not_provisioned"
+    "status": "A0.1_executed",
+    "gpu": "NVIDIA A10",
+    "driver": "580.126.09",
+    "torch_cuda": "13.0"
   },
   "raw_data": {
-    "status": "not_collected",
-    "directory": "experiments/0001-mechanism-feasibility/raw"
+    "status": "collected_locally_ignored",
+    "directory": "experiments/0001-mechanism-feasibility/raw/a0.1",
+    "final_run_id": "a01-20260721T190035Z-span-v2",
+    "tracked_summary": "experiments/0001-mechanism-feasibility/A0.1-results-2026-07-22.md"
   }
 }

@@ -1,6 +1,6 @@
 # Related Work and Upstream Status
 
-> Review date: 2026-07-11
+> Review date: 2026-07-13
 >
 > This is a planning snapshot. Re-verify statuses before implementation or any
 > novelty claim because this area changes rapidly.
@@ -16,6 +16,7 @@ hardware-calibrated evaluation and failure-domain analysis.
 | Work | Main contribution | Overlap | Project implication |
 |---|---|---|---|
 | [InferCept](https://arxiv.org/abs/2402.01869) | Preserve, swap, and discard for augmented LLM interceptions; MinWaste scheduling | Direct three-action predecessor | Use as a conceptual/cost baseline; do not claim mechanism novelty |
+| [TokenCake](https://arxiv.org/abs/2510.18586) | `call_start`/`call_finish`-driven proactive CPU offload, predictive upload, agent-graph-aware memory reservation, and pressure coordination | Direct tool-gap/offload/policy predecessor | Do not claim first tool-gap lifecycle, proactive offload, predictive restore, or agent-aware dynamic policy; focus on current-vLLM conformance, correctness, attribution, and measured boundaries |
 | [Continuum](https://arxiv.org/abs/2511.02230) | Tool-aware KV TTL and program-level scheduling | Direct static/dynamic retention predecessor | Tuned TTL is mandatory; duration prediction is not novel |
 | [KVFlow](https://arxiv.org/abs/2507.07400) | Workflow-aware eviction and prefetch for multi-agent prefix caches | Related workflow-level policy | Relevant to static agent graphs; not an MVP implementation target |
 | [PBKV](https://arxiv.org/abs/2605.06472) | Prediction-based lifecycle-aware eviction and conservative prefetch on SGLang/HiCache | Direct prediction and robustness predecessor | Do not claim first regret/robustness; a simplified port must be labeled inspired |
@@ -32,6 +33,10 @@ hardware-calibrated evaluation and failure-domain analysis.
 | [LMCache](https://github.com/LMCache/LMCache) | External KV cache, offload, sharing, and connectors | Possible future storage dependency, not the lifecycle policy itself |
 
 ## 4. vLLM Upstream Status
+
+Status terms in this section describe upstream evidence, never local project
+completion. The Gate A manifest must pin a tag plus exact commit because `latest`
+documentation may be newer than the selected release.
 
 ### Context-Aware Retention
 
@@ -51,13 +56,41 @@ compatibility patch, narrow the project, or contribute a focused upstream change
   native offloading architecture.
 - [PR #37874](https://github.com/vllm-project/vllm/pull/37874) merged a pluggable
   CPU offload `CachePolicy` structure.
-- [vLLM releases](https://github.com/vllm-project/vllm/releases) show continued
-  work on per-request policy hooks, selective offload, tiering, and connectors.
+- [PR #40020](https://github.com/vllm-project/vllm/pull/40020) merged the
+  multi-tier offloading framework on 2026-05-13; vLLM release notes subsequently
+  list multi-tier and secondary-tier work as shipped upstream.
+- The [KV offloading usage guide](https://docs.vllm.ai/en/latest/features/kv_offloading_usage/)
+  documents per-request `max_offload_tokens`, but explicitly marks it experimental
+  and subject to change.
 
-Implication: native offload is the default MVP mechanism. Use LMCache only when a
-measured requirement exceeds native capabilities.
+Implication: native offload/tiering is a dependency and default data path, not a
+candidate contribution. The project must source-audit completion visibility,
+selective behavior, invalidation, fallback, and path attribution. Use LMCache or
+additional storage only when a measured requirement exceeds native capabilities.
 
-## 5. What Remains Safe to Claim
+## 5. TokenCake Evidence Boundary
+
+TokenCake directly overlaps the old policy-centered ToolGap-KV story:
+
+```text
+function-call stall events
+proactive asynchronous CPU offload
+predictive upload before tool completion
+measured per-block transfer constants
+pressure-aware scheduling and dynamic memory reservation
+```
+
+Its reported reductions in end-to-end latency and increases in GPU memory
+utilization belong only to the paper's A100/H20, model, application, and workload
+environment. They are not local evidence. No author-provided reproducible artifact
+has been verified in this repository, so a local implementation defaults to
+`TokenCake-inspired` fidelity L2/L3 unless original code and decision equivalence
+are established.
+
+TokenCake changes honest positioning and baseline selection; it does not invalidate
+a current-vLLM integration/correctness/boundary work sample.
+
+## 6. What Remains Safe to Claim
 
 Before implementation:
 
@@ -86,7 +119,7 @@ first agent-aware KV runtime
 first production-ready lifecycle API
 ```
 
-## 6. Fidelity Levels
+## 7. Fidelity Levels
 
 Use these labels for external policies:
 
@@ -101,7 +134,7 @@ Decision-equivalence against a second implementation written from the same paper
 does not by itself prove fidelity. Use original cases, invariants, artifacts, and
 a deviation ledger wherever possible.
 
-## 7. Mandatory Deviation Ledger
+## 8. Mandatory Deviation Ledger
 
 For each reimplementation, record:
 
@@ -119,7 +152,7 @@ native and retuned results
 For PBKV-to-vLLM specifically, radix-node versus block granularity, HiCache versus
 vLLM connector behavior, and preemption semantics are material deviations.
 
-## 8. Review Procedure
+## 9. Review Procedure
 
 Before every major roadmap revision:
 

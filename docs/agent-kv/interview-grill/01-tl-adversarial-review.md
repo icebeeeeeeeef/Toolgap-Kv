@@ -4,14 +4,19 @@
 >
 > Project claim state: `roadmap`
 >
-> Last reviewed: 2026-07-11
+> Last reviewed: 2026-07-13
+>
+> Historical-draft note: this initial grill predates the CT1-CT3 reshape and the
+> TokenCake audit. Its questions remain useful, but policy-centered answers are
+> conditional on Gate B and current claims must follow `../INTERVIEW_MAP.md`.
 
 ## 1. Review Lens
 
 This review assumes the strongest interview-sized version described in
-[../NARRATIVE.md](../NARRATIVE.md) has eventually been completed. The real
-project currently has no implementation or measurement, so every completed-tense
-answer below is a future template gated by the listed evidence.
+[../NARRATIVE.md](../NARRATIVE.md) has eventually been completed. The real project
+currently has only engine-independent Phase 0 scaffolding and no current-vLLM
+integration or measurement, so every completed-tense answer below is a future
+template gated by the listed evidence.
 
 The provisional TL verdict is:
 
@@ -47,11 +52,12 @@ owned implementation, and an actual research result.
 > established those actions and several scheduling policies. My owned mainline is
 > a pinned-vLLM, in-process lifecycle implementation: request epochs and legal
 > transitions, tool-wait/resume hooks, safe fallback, hardware calibration, and
-> request-level DecisionTrace. The evaluation contribution is a reproducible map
-> of when dynamic control beats a separately tuned static TTL and where it does
-> not. If my online policy is not algorithmically distinct from prior work, I
-> describe the project as runtime implementation plus measurement study, not as a
-> novel scheduling algorithm.
+> request-level DecisionTrace. The evaluation contribution is a reproducible
+> retain/offload/recompute boundary map, including conditions where one action
+> loses. A dynamic-versus-static result is included only if Gate B opens. If my
+> online policy is not justified or not algorithmically distinct from prior work,
+> I describe the project as runtime implementation plus measurement study, not as
+> a novel scheduling algorithm.
 
 **Likely follow-ups**
 
@@ -92,12 +98,13 @@ Whether the candidate confuses implementation size with research contribution.
 **Recommended answer**
 
 > The engineering is necessary because the hypothesis concerns real scheduler,
-> memory, transfer, and queueing behavior. It becomes a systems research project
-> only through a falsifiable question: under which hardware-cost ratios, HBM
-> pressure, tool-gap distributions, and loads does dynamic lifecycle control beat
-> a tuned static policy? The implementation supplies causal evidence; it is not
-> itself the novelty claim. If I only finish the components without answering that
-> question, I will present it as an engineering project rather than research.
+> memory, transfer, and queueing behavior. It becomes a systems study through a
+> falsifiable question: under which hardware-cost ratios, HBM pressure, tool-gap
+> distributions, and loads does each lifecycle action win or lose? Dynamic
+> lifecycle control is a second question only after Gate B. The implementation
+> supplies causal evidence; it is not itself a novelty claim. If I finish the
+> runtime and correctness work without defensible boundary evidence, I present
+> only the verified engineering claims.
 
 **Likely follow-ups**
 
@@ -185,8 +192,8 @@ path rather than in an external Python wrapper.
 > decision snapshots, choosing actions, handling asynchronous completion and
 > fallback, and emitting DecisionTrace tied to actual block outcomes. In the
 > completed interview answer I must name the exact modified modules, functions,
-> tests, and patch commit. If the work stays outside the serving process, I will
-> describe it only as policy and benchmark engineering.
+> tests, and patch commit. If the work stays outside the serving process, it is a
+> preserved benchmark artifact, not completion of this recruiting mainline.
 
 **Likely follow-ups**
 
@@ -207,8 +214,9 @@ path rather than in an external Python wrapper.
 
 **Project action if the answer remains weak**
 
-Reduce the ownership claim to the actual adapter, policy, replay, and measurement
-work; do not claim the dependency's data path.
+Preserve the adapter/replay/measurement artifact, but stop or reselect the
+recruiting mainline unless Gate A finds a non-duplicative in-process lifecycle
+semantic the candidate can own. Never claim the dependency's data path.
 
 ## Q05. Is Retain Just Doing Nothing?
 
@@ -452,9 +460,11 @@ the decision rule.
 
 > Each request has a monotonically increasing lifecycle epoch. Async completions
 > can mutate state only when request identity, epoch, and expected transition all
-> match. Block ownership is exclusive across resident, transfer, offloaded, and
-> released states. Cancellation is idempotent and prevents stale completions from
-> resurrecting a request. Partial or incompatible restore is never consumed; the
+> match. The lifecycle claim has one legal terminal action per epoch, but physical
+> prefix blocks remain vLLM-owned and may be shared through engine refcounts;
+> candidate code never assumes session-exclusive block ownership. Cancellation is
+> idempotent and prevents stale completions from resurrecting a request. Partial
+> or incompatible restore is never consumed; the
 > runtime recomputes from preserved tokens or fails explicitly. The completed
 > answer must include one concrete race found in testing, its trace, root cause,
 > fix, and regression test.
@@ -717,12 +727,11 @@ Scientific honesty and whether success was defined only as producing an uplift.
 
 **Recommended answer**
 
-> The policy hypothesis would be falsified for that tested regime, but the project
-> would not automatically be worthless. A rigorous result can still establish the
-> measured cost curves, the reachable action regions, the complexity threshold,
-> and why static control is sufficient under stable workloads. If all reachable
-> workloads collapse to one dominant action, I stop policy expansion and publish
-> the measurement and feasibility result rather than manufacturing a win.
+> The policy hypothesis would be falsified for that tested regime, but CT1-CT3 do
+> not fail. The candidate-owned runtime, its failure semantics, and the measured
+> cost curves remain the project evidence. If all reachable workloads collapse to
+> one dominant action, I retire CT4 and report why static control is sufficient
+> rather than manufacturing a dynamic-policy win.
 
 **Likely follow-ups**
 

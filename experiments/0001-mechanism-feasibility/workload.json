@@ -13,6 +13,7 @@
       },
       "expected_observed_action": "gpu_hit",
       "required_evidence": [
+        "queue_timing",
         "gpu_hit_tokens",
         "resume_first_token_ns",
         "output_token_hash"
@@ -30,6 +31,7 @@
       },
       "expected_observed_action": "cpu_restore",
       "required_evidence": [
+        "queue_timing",
         "store_start_ns",
         "store_end_ns",
         "gpu_miss_tokens",
@@ -52,6 +54,7 @@
       },
       "expected_observed_action": "recompute",
       "required_evidence": [
+        "queue_timing",
         "gpu_miss_tokens",
         "cpu_miss_tokens",
         "prefill_start_ns",

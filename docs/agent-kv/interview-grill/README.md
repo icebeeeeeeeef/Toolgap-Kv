@@ -2,11 +2,17 @@
 
 > Project claim state: `roadmap`
 >
-> Last reviewed: 2026-07-11
+> Last reviewed: 2026-07-14
 >
 > The answers in this directory are evidence-gated templates. They are not
 > completed-project claims and must not be recited in completed tense until the
 > linked implementation or experiment exists.
+>
+> Governance note: CT1 integration, CT2 correctness/recovery, and CT3 measured
+> boundary are the current mainline. They require a candidate-owned, in-process
+> logical lifecycle controller over vLLM's reused physical KV data plane. Treat
+> any dynamic-policy question as conditional CT4 after Gate B, even when an older
+> answer below assumes a policy.
 
 ## 1. Purpose
 
@@ -114,11 +120,15 @@ The project is interview-defensible only when the candidate can sustain a
 20-minute discussion that includes:
 
 ```text
-one request traced through the modified runtime path
+one request whose lifecycle behavior changes through the candidate controller
+one removal/bypass test separating owned behavior from instrumentation
 one quantitative retain/offload/recompute break-even argument
 one rejected design
 one correctness failure and regression test
 one fair baseline and one ablation
-one workload where the dynamic policy loses
+one workload where the selected action or optimization loses
 an exact ownership boundary between candidate code and dependencies
 ```
+
+If Gate B opens, add one workload where the dynamic selector loses or disables
+itself; CT4 is not required for the base pass standard.

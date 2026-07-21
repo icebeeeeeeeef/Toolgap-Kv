@@ -2,9 +2,10 @@
 
 ## 1. Claim-State Warning
 
-Everything in this file is a future narrative template. The project currently
-has no implementation or measurement. Do not use completed-action verbs until
-the corresponding evidence exists.
+Everything in this file is a future narrative template. Only engine-independent
+Phase 0 scaffolding is shipped; the project has no current-vLLM integration or
+measurement. Do not use completed-action verbs until the corresponding evidence
+exists.
 
 ## 2. Honest Background Narrative
 
@@ -32,11 +33,11 @@ unless that event actually occurred and is safe to disclose.
 
 > Agent workloads pause during tool calls. Their KV cache is temporarily idle but
 > may be expensive to recompute. Retaining everything wastes HBM, offloading
-> consumes transfer bandwidth, and dropping everything raises resume TTFT. I am
-> building a vLLM lifecycle runtime that chooses among retain, CPU offload, and
-> recompute from measured hardware costs and runtime pressure, then validates the
-> policy against tuned static baselines with deterministic replay and failure
-> injection.
+> consumes transfer bandwidth, and dropping everything may raise resume TTFT. I am
+> using a pinned current-vLLM build to make the requested and actual cache path
+> auditable, test fallback and stale/failure behavior, and measure where retain,
+> CPU restore, or recompute wins or loses. I will add dynamic selection only if
+> measurements prove that static behavior cannot cover the reachable regimes.
 
 Use present tense only after implementation starts. Before then, say `I plan to`
 or `the roadmap is`.
@@ -51,16 +52,23 @@ or `the roadmap is`.
 >
 > In an agent loop, an LLM generates a tool call and pauses. During that gap, the
 > runtime can retain KV in GPU memory, offload it to CPU memory, or evict it and
-> recompute when the tool returns. None is always optimal because GPU compute,
-> HBM capacity, host-link bandwidth, gap duration, cancellation, and queue pressure
-> change the break-even point.
+> recompute when the tool returns. GPU compute, HBM capacity, host-link bandwidth,
+> gap duration, cancellation, and queue pressure may change the break-even point;
+> the project measures whether those changes are reachable on its testbed.
 >
-> The project integrates a lifecycle state machine and cost-aware policy into a
-> pinned vLLM version. It records a DecisionTrace for each action, handles cancel
-> and transfer failure, and evaluates the policy against default recompute, static
-> TTL, soft retention, and always-offload baselines. The goal is not to claim a
-> new first mechanism; it is to build a defensible runtime artifact and show the
-> conditions where dynamic control is or is not justified.
+> The project first audits one current vLLM version to find the smallest supported
+> lifecycle/offload seam. Over that seam I implement an in-process logical
+> lifecycle controller for epochs, transitions, asynchronous completion,
+> cancellation, fallback, and cleanup. It orchestrates vLLM's existing KV movement
+> rather than replacing its block manager or tensor-transfer code, and records
+> requested action, actual GPU hit, CPU restore or recompute, and explicit fallback
+> in a DecisionTrace. The performance work measures prefill and transfer costs plus
+> active-request and tail impact on a declared single-node testbed.
+>
+> The goal is not to claim a new lifecycle mechanism. It is to produce a real
+> runtime work sample with conformance, failure, and break-even evidence. A tuned
+> static TTL or action-only policy is allowed to win; a dynamic selector is a
+> conditional extension rather than the success criterion.
 
 ## 5. Ownership Boundary
 
@@ -70,12 +78,12 @@ or `the roadmap is`.
 lifecycle state machine and invariants
 vLLM integration or plugin
 cost profiler and calibration format
-online decision policy
+forced/static action selection and, only after Gate B, an online policy
 DecisionTrace and attribution
 workload compiler and deterministic replay
-baseline fairness and experiment protocol
+baseline fairness and experiment protocol; Gate B0 only after CT3
 failure injection and fallback tests
-hindsight references under documented assumptions
+hindsight references under documented assumptions, only if Gate B needs them
 performance and validity report
 ```
 
@@ -126,18 +134,24 @@ Recommended answer:
 
 ### What Did You Actually Code?
 
-The completed answer must name files/modules and tests. The intended categories are:
+The completed answer must name files/modules and tests. The unconditional intended
+categories are:
 
 ```text
-runtime lifecycle state and hooks
-policy and profiler
-executors/fallback
+minimal runtime lifecycle seam and hooks
+requested/observed/fallback contract
+native-executor orchestration and safe fallback
 decision tracing
 deterministic replay
 fault-injection and performance tests
 ```
 
 Do not answer with a list of frameworks.
+
+The state machine is not optional scope. The code must own lifecycle behavior,
+while vLLM remains responsible for physical block/refcount management,
+PagedAttention, model execution, and native D2H/H2D movement. A module that only
+emits DecisionTrace records is observability work, not the runtime mechanism.
 
 ### What Was the Hardest Problem?
 
@@ -148,7 +162,7 @@ categories are:
 cache identity and correctness
 resume/cancel/transfer races
 attributing tail latency under queueing
-matching policy estimates to asynchronous real execution
+matching requested actions to asynchronous observed execution
 static baseline tuning without test leakage
 ```
 
@@ -166,31 +180,38 @@ instrumentation, root cause, fix, and regression test.
 
 Use only after evidence exists.
 
-### Runtime-Focused Version
+### Integration, Correctness, and Boundary Version
 
-- Implemented an agent-aware KV lifecycle runtime for vLLM that coordinates GPU
-  retention, CPU offload/restore, and fallback recomputation across tool-call
-  pauses, including epoch-based resume/cancel handling and cache-compatibility
-  checks.
-- Built a hardware-calibrated cost policy and request-level DecisionTrace using
-  measured prefill and transfer curves; bounded decision overhead at `[X]` under
-  `[hardware/model/load]`.
-- Developed deterministic agent-workload replay and fault injection covering
-  duplicate resume, cancel-during-restore, tier exhaustion, and transfer failure,
-  with `[N]` verified failure scenarios and fallback outcomes.
-- Evaluated default recompute, tuned static TTL, soft retention, always-offload,
-  and dynamic policies across `[workloads/hardware]`, improving `[metric]` by
-  `[X]` in `[positive region]` while identifying `[negative region]` where static
-  control remained preferable.
+- Integrated paused-agent KV lifecycle experiments into pinned vLLM `[commit]`
+  through `[extension/patch]`, tracing requested actions to GPU hit, CPU restore,
+  recompute, and explicit fallback while preserving the default request path.
+- Defined and tested `[identity/epoch/fallback contracts]` for `[failure cases]`,
+  using deterministic fault injection and output/cleanup assertions under
+  `[model/runtime configuration]`.
+- Measured retain/offload/recompute boundaries on `[hardware]` across
+  `[context/KV sizes and pressure condition]`; compared `[baselines]`, reported
+  `[metric/result]`, and preserved `[losing region or active-request regression]`.
+- Built a deterministic tool-use replay harness from `[workload provenance]`,
+  explicitly labeling injected timing and arrival behavior as
+  `trace-derived synthetic` and calibrating it with `[real trace]`.
 
 ### Measurement-Study Version
 
 - Built a real-vLLM agent KV lifecycle testbed and hardware profiler that maps
   retain/offload/recompute break-even regions across context length, tool gap,
   HBM pressure, and host-link contention.
-- Compared tuned static and cost-aware lifecycle policies against documented
-  hindsight bounds, reporting both positive regions and workloads where dynamic
-  control failed to justify its overhead.
+- Compared forced action paths and tuned static behavior on held-out workloads,
+  reporting both positive boundaries and workloads where moving KV was slower or
+  harmed active-request tail latency.
+
+### Conditional Gate-B Policy Version
+
+Use only if Gate B passes and the evidence ledger contains the results:
+
+- Implemented a transparent lifecycle selector over shared action executors after
+  measurements showed `[regime A]` and `[regime B]` preferred different actions;
+  compared it with a separately tuned static baseline, measuring `[result]`,
+  `[decision overhead]`, and `[losing condition]` on `[testbed]`.
 
 ## 8. Language to Avoid
 

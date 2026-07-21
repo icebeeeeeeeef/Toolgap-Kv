@@ -1,14 +1,23 @@
 # Evaluation Plan
 
+> Status: `roadmap`
+>
+> No GPU, simulator, or current-vLLM result exists yet. This file defines future
+> evidence; examples and expected boundaries are not measurements.
+
 ## 1. Evaluation Objective
 
-Determine when lifecycle decisions improve real agent-serving outcomes and when
-the simplest static policy is sufficient.
+First determine whether a candidate-owned lifecycle controller over current vLLM
+can enforce paths that are real, observable, safe, and attributable. Then map
+retain/offload/recompute boundaries. Evaluate dynamic selection only after Gate B
+in [ROADMAP.md](ROADMAP.md).
 
 The evaluation must separate:
 
 ```text
-policy quality
+mechanism conformance and attribution
+owned-controller transition and bypass conformance
+correctness and fallback
 mechanism overhead
 hardware transfer/compute ratio
 memory-pressure effects
@@ -18,31 +27,48 @@ queueing and concurrency effects
 
 ## 2. Pre-Registered Hypotheses
 
-### H1: Multiple Decision Regimes Exist
+### Gate A H1: Requested and Observed Paths Are Distinguishable
 
-Retain, offload, and recompute each minimize cost in at least one reachable
-combination of context length, tool gap, resume probability, and resource pressure.
+For one pinned vLLM build, at least CPU restore and full recompute, and preferably
+GPU hit, can be forced and attributed through runtime evidence rather than inferred
+from end-to-end latency alone. At least one lifecycle transition or fallback is
+enforced by candidate-owned in-process code; bypassing that code removes the
+behavior while leaving the default request path unchanged.
 
-### H2: Dynamic Policy Beats One Fixed TTL Selectively
+### Gate A H2: Fallback Is Explicit and Safe
 
-The dynamic policy improves resume TTFT or Goodput@SLO over the best tuned static
-TTL in heterogeneous or shifting workloads, not necessarily in stationary ones.
+A requested/observed mismatch is accepted only with an allowed fallback reason.
+At least one restore or lifecycle failure safely recomputes or explicitly fails,
+without silently reusing the failed materialization. Broader late-completion,
+request-resurrection, hang, and capacity-cleanup coverage belongs to CT2/DC7.
 
-### H3: Hardware Changes the Boundary
+### CT2 H3: Lifecycle Races Are Fenced by the Owned Controller
 
-A faster GPU may make recomputation cheaper, a faster host link may make offload
-cheaper, and larger HBM may make retention cheaper. The policy's action regions
-should move consistently with measured cost curves.
+Illegal transitions, duplicate resume/completion, stale epochs, cancel during
+transfer, and repeated cleanup are rejected or handled idempotently. Capacity
+returns to baseline and ordinary requests do not enter candidate-owned state.
 
-### H4: Pressure Matters
+### Gate A H4: Timing Is Decomposable
 
-Isolated request latency is insufficient. An action that helps one request may
-hurt system goodput through HBM occupancy, transfer contention, or blocked decode.
+Queue, store, restore, prefill, and first-token time can be separated on the real
+path with complete token/block accounting and an output correctness check.
 
-### H5: Failure Safety Is Measurable
+### CT3 H5: Transfer/Recompute Boundaries Are Measurable
 
-Transfer and lifecycle failures must fall back without incorrect KV reuse,
-request resurrection, silent hangs, or unexplained completion changes.
+Context/KV size and one pressure variable produce a reproducible cost or dominance
+boundary, including an action that loses and active-request guardrails.
+
+### Gate B0 H6: Multiple Decision Regimes Exist
+
+At least two reachable regimes prefer different actions. This is unknown until
+CT3 evidence exists; failure retires dynamic-policy work without invalidating
+CT1-CT3.
+
+### Conditional Gate B H7: Dynamic Selection Adds Net Value
+
+A transparent selector improves the preregistered metric over tuned static and
+action-only baselines on a separate test split without unacceptable decision
+overhead, p95/p99 regression, or hidden executor differences.
 
 ## 3. Environment Manifest
 
@@ -71,8 +97,11 @@ offload or preemption behavior so the baseline does not gain an unreported actio
 
 ### Tuned Static TTL
 
-Tune TTL on a separate calibration split. Report both the default candidate TTLs
-and the selected value. Do not tune on the final test set.
+Attempt this only in the post-CT3 Gate B0 admission audit and only when the pinned
+runtime exposes fair TTL/retention semantics over the same executors. Tune on a
+separate calibration split, report all candidates and the selected value, and do
+not tune on the final test set. If a fair TTL seam does not exist, use the
+strongest action-only/static substitute and preserve the missing-contract result.
 
 ### Soft Retention
 
@@ -83,11 +112,12 @@ call this `always-retain`.
 ### Always Offload
 
 Every eligible paused request is offered to the CPU tier subject to the same tier
-capacity and failure semantics as the dynamic policy.
+capacity and failure semantics as the other candidate paths.
 
 ### Cost-Aware Dynamic Policy
 
-Uses the same executors as the static baselines. Only the decision rule changes.
+Conditional on Gate B. It uses the same executors as static/action-only baselines;
+only the decision rule changes. Before Gate B it is not an implementation target.
 
 ### Optional Paper-Inspired Policies
 
@@ -125,6 +155,14 @@ Required workload classes:
 
 Public traces may calibrate distributions, but sanitized traces that omit exact
 tokens cannot be described as exact production replay.
+
+Hugging Face agent trajectories such as
+[AgentSuite/BFCL_V4-trajectories](https://huggingface.co/datasets/AgentSuite/BFCL_V4-trajectories)
+may seed real turn, message, and tool-call structure. Their dataset cards do not
+establish wall-clock tool latency, engine scheduler timing, GPU KV state, or
+production arrival processes. Injected gaps, arrivals, cancellation, or pressure
+must therefore be labeled `trace-derived synthetic` and calibrated against at
+least one local real-vLLM trace.
 
 ## 6. Metrics
 
@@ -187,12 +225,16 @@ Measure before evaluating policies:
 1. Prefill latency over token length and batch/load.
 2. D2H store latency over KV bytes and concurrent transfers.
 3. H2D restore latency over KV bytes and concurrent transfers.
-4. Scheduler/decision overhead with the policy disabled and enabled.
+4. Lifecycle-controller overhead with the owned path bypassed and enabled;
+   selector overhead is added only if CT4 opens.
 5. HBM pressure effects on admission, preemption, and active decode.
 
 These curves must come from the same engine path used by the end-to-end tests.
 
-## 9. Hindsight References and Bounds
+## 9. Conditional Hindsight References and Bounds
+
+This section is Gate B-only and not required for the core CT1-CT3 work sample.
+Do not implement an optimizer merely to make the evaluation look complete.
 
 ### Local Clairvoyant Lower Bound
 
@@ -231,19 +273,18 @@ in the real runtime. It is a strong comparator but not necessarily optimal.
 
 ## 11. Negative-Result Rules
 
-The report must include conditions where:
+The CT1-CT3 report must include applicable conditions where:
 
 ```text
-static TTL wins
 offload is slower than recompute
 retention harms active goodput
-prediction or calibration shifts
 transfer contention reverses a decision
-policy overhead exceeds saved work
 ```
 
-A dynamic policy that cannot disable itself or fall back in these regions is not
-production-shaped.
+At Gate B0, include where the strongest fair static baseline wins. If Gate B then
+opens, additionally include calibration shifts and regions where policy overhead
+exceeds saved work. A dynamic policy that cannot disable itself or fall back in
+these regions is not production-shaped.
 
 ## 12. Evidence Ledger
 
@@ -251,13 +292,37 @@ Maintain one row per material claim:
 
 | Claim | State | Owned artifact | Environment/workload | Raw evidence | Validity boundary |
 |---|---|---|---|---|---|
-| Dynamic policy lowers p95 resume TTFT by `[X]` | Not measured | Policy + harness | `[hardware/workload]` | `[path]` | `[scope]` |
-| Restore failure falls back without corruption | Not implemented | State-machine test | Fault injection | `[path]` | Tested failure modes only |
-| Static TTL approaches hindsight bound | Not measured | Optimizer + replay | `[trace]` | `[path]` | Proxy assumptions |
+| Phase 0 event/trace contracts pass local tests | `shipped` | `src/toolgap_kv/phase0.py`, `tests/test_phase0.py` | Dependency-free local checks | `make check` | No vLLM behavior or performance |
+| Canonical single-tool history does not provide a fully reusable APC block through the assistant semantic end | `experimentally validated` (negative) | `scripts/run_a01.py`, [A0.1 result report](../../experiments/0001-mechanism-feasibility/A0.1-results-2026-07-22.md) | One hand-authored fixture; Qwen2.5-7B-Instruct revision `a09a35458c702b33eeacc393d103063234e8bc28`; vLLM `0.25.1` commit `752a3a504485790a2e8491cacbb35c137339ad34`; NVIDIA A10 | Local ignored bundle `experiments/0001-mechanism-feasibility/raw/a0.1/a01-20260721T190035Z-span-v2/`; tracked SHA-256 list in report | `semantic_span_equal=true`, but ceiling `192 < a_end 198`; no APC hit/miss, CPU restore, lifecycle-runtime, or performance inference; blocks A0.2 on this pin/fixture |
+| Candidate controller owns lifecycle semantics | `roadmap` | Future lifecycle runtime, adapter, removal/bypass and transition tests | Pinned vLLM plus deterministic event fixtures | `[future path]` | Audited paths and failures only |
+| Three real lifecycle paths are attributable | `roadmap` | Experiment 0001 + future integration | `[pinned environment/workload]` | `[future raw path]` | Single pinned testbed |
+| Restore failure safely falls back | `roadmap` | Future state-machine/adapter test | Deterministic fault injection | `[future path]` | Tested failure modes only |
+| Transfer/recompute boundary is measured | `roadmap` | Runtime integration + benchmark | `[future hardware/workload]` | `[future path]` | Declared regimes only |
+| Strongest fair static baseline is established | `roadmap`, Gate B0 | Future baseline ledger + shared executors | Separate tuning/test workloads | `[future path]` | TTL only if the pinned seam is fair |
+| Dynamic selector beats the Gate B0 baseline | `roadmap`, Gate B only | Future selector + shared executors | `[future hardware/workload]` | `[future path]` | Only if Gate B opens |
 
 Do not remove placeholders until evidence exists.
 
-## 13. Allowed Result Language
+## 13. Decision-Card Closure
+
+A measurement closes a decision card only when it records:
+
+```text
+the decision and at least two alternatives
+the falsifiable expectation registered before measurement
+the exact changed mechanism and attribution method
+real measurement or deterministic fault evidence
+the selected and rejected alternatives
+one losing or applicability boundary
+owned artifacts and one reproduction command
+claim state and testbed/workload provenance
+organic interview hooks supported by the decision
+```
+
+Artifact count, code size, or documentation length cannot substitute for a closed
+card. The registry lives in [INTERVIEW_MAP.md](INTERVIEW_MAP.md).
+
+## 14. Allowed Result Language
 
 Good:
 
