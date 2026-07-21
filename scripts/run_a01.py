@@ -17,7 +17,13 @@ import traceback
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from toolgap_kv import a01 as a01_module
-from toolgap_kv.a01 import Span, decide, locate_span, write_bundle
+from toolgap_kv.a01 import (
+    Span,
+    decide,
+    locate_span,
+    message_region_from_prefixes,
+    write_bundle,
+)
 
 
 VLLM_VERSION = "0.25.1"
@@ -132,11 +138,21 @@ def _span_for_full_render(
     actual_ids: Sequence[int],
     open_marker: str,
     close_marker: str,
+    *,
+    search_start: int = 0,
+    search_end: int = None,
 ) -> Span:
     local_ids, offsets = _full_encoding(tokenizer, rendered)
     if local_ids != list(actual_ids):
         raise ValueError("full local tokenization does not equal engine token IDs")
-    return locate_span(rendered, open_marker, close_marker, offsets)
+    return locate_span(
+        rendered,
+        open_marker,
+        close_marker,
+        offsets,
+        search_start=search_start,
+        search_end=search_end,
+    )
 
 
 def _worker(ordinal: int, configuration: Mapping[str, Any], connection: Any) -> None:
@@ -231,9 +247,34 @@ def _worker(ordinal: int, configuration: Mapping[str, Any], connection: Any) -> 
         )[0]
         r1_ids = list(r1_output.prompt_token_ids)
         r1_rendered = _render_text(tokenizer, r1_messages, fixture["tools"])
+        initial_rendered = tokenizer.apply_chat_template(
+            list(fixture["initial_messages"]),
+            tools=list(fixture["tools"]),
+            tokenize=False,
+            add_generation_prompt=False,
+        )
+        through_assistant_rendered = tokenizer.apply_chat_template(
+            r1_messages[: len(fixture["initial_messages"]) + 1],
+            tools=list(fixture["tools"]),
+            tokenize=False,
+            add_generation_prompt=False,
+        )
+        assistant_region_start, assistant_region_end = message_region_from_prefixes(
+            r1_rendered,
+            str(initial_rendered),
+            str(through_assistant_rendered),
+        )
         open_marker = str(parser.tool_call_start_token)
         close_marker = str(parser.tool_call_end_token)
-        r1_span = _span_for_full_render(tokenizer, r1_rendered, r1_ids, open_marker, close_marker)
+        r1_span = _span_for_full_render(
+            tokenizer,
+            r1_rendered,
+            r1_ids,
+            open_marker,
+            close_marker,
+            search_start=assistant_region_start,
+            search_end=assistant_region_end,
+        )
         r0_text = tokenizer.decode(
             completion_ids,
             skip_special_tokens=False,
@@ -248,8 +289,13 @@ def _worker(ordinal: int, configuration: Mapping[str, Any], connection: Any) -> 
             left_boundary_expansion=r0_completion_span.left_boundary_expansion,
             right_boundary_expansion=r0_completion_span.right_boundary_expansion,
         )
-        r1_envelope_start = r1_rendered.index(open_marker)
-        r1_envelope_end = r1_rendered.index(close_marker, r1_envelope_start) + len(close_marker)
+        r1_envelope_start = r1_rendered.index(
+            open_marker, assistant_region_start, assistant_region_end
+        )
+        r1_envelope_end = (
+            r1_rendered.index(close_marker, r1_envelope_start, assistant_region_end)
+            + len(close_marker)
+        )
         r1_tool = _parse_one_tool_call(parser, r1_rendered[r1_envelope_start:r1_envelope_end])
         if r0_tool != r1_tool:
             raise ValueError("R0 and R1 parser structures differ")

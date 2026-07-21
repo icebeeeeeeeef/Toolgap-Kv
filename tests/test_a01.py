@@ -12,6 +12,7 @@ from toolgap_kv.a01 import (
     full_block_ceiling,
     lcp_length,
     locate_span,
+    message_region_from_prefixes,
     write_bundle,
 )
 
@@ -57,6 +58,33 @@ class A01TokenLogicTest(unittest.TestCase):
             locate_span("plain", "<tool>", "</tool>", [(0, 5)])
         with self.assertRaisesRegex(ValueError, "nested"):
             locate_span("<tool><tool></tool></tool>", "<tool>", "</tool>", [(0, 26)])
+
+    def test_span_can_be_scoped_to_assistant_message_when_template_examples_repeat_markers(self):
+        rendered = "schema <tool>{}</tool> assistant <tool>{\"city\":\"Hangzhou\"}</tool> tail"
+        actual_start = rendered.index("<tool>", rendered.index("assistant"))
+        actual_end = rendered.index("</tool>", actual_start) + len("</tool>")
+        span = locate_span(
+            rendered,
+            "<tool>",
+            "</tool>",
+            [(index, index + 1) for index in range(len(rendered))],
+            search_start=rendered.index("assistant"),
+            search_end=len(rendered),
+        )
+        self.assertEqual((span.start, span.end), (actual_start, actual_end))
+
+    def test_message_region_is_derived_from_verified_template_prefixes(self):
+        rendered = "system\nassistant\n<tool>{}</tool>\ntool-result"
+        self.assertEqual(
+            message_region_from_prefixes(
+                rendered,
+                "system\n",
+                "system\nassistant\n<tool>{}</tool>\n",
+            ),
+            (len("system\n"), len("system\nassistant\n<tool>{}</tool>\n")),
+        )
+        with self.assertRaisesRegex(ValueError, "prefix"):
+            message_region_from_prefixes(rendered, "other", "other assistant")
 
     def test_structurally_valid_token_difference_is_serialization_stop(self):
         verdict = decide(

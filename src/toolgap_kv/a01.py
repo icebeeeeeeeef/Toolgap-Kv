@@ -67,29 +67,72 @@ def full_block_ceiling(lcp: int, block_size: int) -> int:
     return block_size * (lcp // block_size)
 
 
-def _unique_envelope(rendered: str, open_marker: str, close_marker: str) -> Tuple[int, int]:
+def message_region_from_prefixes(
+    rendered: str,
+    before_message: str,
+    through_message: str,
+) -> Tuple[int, int]:
+    """Return one message's character interval from two verified renders.
+
+    Chat templates may repeat protocol markers in their tool instructions. The
+    candidate assistant message is therefore located by template structure,
+    not by searching the complete render for a globally unique marker.
+    """
+    if not all(isinstance(value, str) for value in (rendered, before_message, through_message)):
+        raise ValueError("template renders must be strings")
+    if not before_message or len(through_message) <= len(before_message):
+        raise ValueError("template message prefixes must be non-empty and increasing")
+    if not through_message.startswith(before_message) or not rendered.startswith(through_message):
+        raise ValueError("template message prefixes do not match the full render")
+    return len(before_message), len(through_message)
+
+
+def _unique_envelope(
+    rendered: str,
+    open_marker: str,
+    close_marker: str,
+    *,
+    search_start: int = 0,
+    search_end: int = None,
+) -> Tuple[int, int]:
     if not all(isinstance(value, str) and value for value in (rendered, open_marker, close_marker)):
         raise ValueError("rendered text and markers must be non-empty strings")
+    if search_end is None:
+        search_end = len(rendered)
+    if (
+        isinstance(search_start, bool)
+        or isinstance(search_end, bool)
+        or not isinstance(search_start, int)
+        or not isinstance(search_end, int)
+        or search_start < 0
+        or search_end > len(rendered)
+        or search_end <= search_start
+    ):
+        raise ValueError("envelope search region must be a non-empty rendered-text interval")
     open_positions = []
-    start = 0
+    start = search_start
     while True:
-        position = rendered.find(open_marker, start)
+        position = rendered.find(open_marker, start, search_end)
         if position < 0:
             break
         open_positions.append(position)
         start = position + len(open_marker)
     if len(open_positions) != 1:
-        first_close = rendered.find(close_marker, open_positions[0] + len(open_marker)) if open_positions else -1
+        first_close = (
+            rendered.find(close_marker, open_positions[0] + len(open_marker), search_end)
+            if open_positions
+            else -1
+        )
         if len(open_positions) > 1 and first_close > open_positions[1]:
             raise ValueError("tool-call envelope markers are nested")
         raise ValueError("tool-call envelope must have one unique open marker")
     close_start = open_positions[0] + len(open_marker)
-    close_position = rendered.find(close_marker, close_start)
+    close_position = rendered.find(close_marker, close_start, search_end)
     if close_position < 0:
         raise ValueError("tool-call envelope must have one close marker")
-    if rendered.find(close_marker, close_position + len(close_marker)) >= 0:
+    if rendered.find(close_marker, close_position + len(close_marker), search_end) >= 0:
         raise ValueError("tool-call envelope must have one unique close marker")
-    if rendered.find(open_marker, close_start) >= 0:
+    if rendered.find(open_marker, close_start, search_end) >= 0:
         raise ValueError("tool-call envelope markers are nested")
     return open_positions[0], close_position + len(close_marker)
 
@@ -99,13 +142,22 @@ def locate_span(
     open_marker: str,
     close_marker: str,
     offsets: Sequence[Tuple[int, int]],
+    *,
+    search_start: int = 0,
+    search_end: int = None,
 ) -> Span:
-    """Map the unique wire envelope to whole-token coordinates.
+    """Map the unique wire envelope in one rendered-text region to token coordinates.
 
     ``offsets`` must come from one full-text fast-tokenizer encoding, not from
     independently encoded string segments.
     """
-    envelope_start, envelope_end = _unique_envelope(rendered, open_marker, close_marker)
+    envelope_start, envelope_end = _unique_envelope(
+        rendered,
+        open_marker,
+        close_marker,
+        search_start=search_start,
+        search_end=search_end,
+    )
     overlaps = []
     for index, offset in enumerate(offsets):
         if not isinstance(offset, tuple) or len(offset) != 2:
