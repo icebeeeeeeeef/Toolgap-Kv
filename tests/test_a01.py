@@ -152,6 +152,15 @@ class A01ArtifactTest(unittest.TestCase):
         )
         self.assertIn("main", module)
 
+    def test_runner_records_the_message_scoped_span_adapter_version(self):
+        module = runpy.run_path(
+            str(ROOT / "scripts/run_a01.py"), run_name="a01_runner_test"
+        )
+        self.assertEqual(
+            module["SPAN_ADAPTER_VERSION"],
+            "message-scoped-full-text-fast-tokenizer-offset-overlap-v2",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

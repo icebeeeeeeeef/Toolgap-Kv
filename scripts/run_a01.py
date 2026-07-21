@@ -29,7 +29,7 @@ from toolgap_kv.a01 import (
 VLLM_VERSION = "0.25.1"
 VLLM_COMMIT = "752a3a504485790a2e8491cacbb35c137339ad34"
 TOOL_ID_HELPER = "vllm.entrypoints.chat_utils.make_tool_call_id"
-SPAN_ADAPTER_VERSION = "full-text-fast-tokenizer-offset-overlap-v1"
+SPAN_ADAPTER_VERSION = "message-scoped-full-text-fast-tokenizer-offset-overlap-v2"
 TOOL_PARSER = "Hermes2ProToolParser"
 
 
