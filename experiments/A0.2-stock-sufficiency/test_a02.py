@@ -376,5 +376,135 @@ class CalibrationRunnerContractTest(unittest.TestCase):
             917504,
         )
 
+
+class RuntimeObservationContractTest(unittest.TestCase):
+    def test_prompt_source_records_sum_without_losing_local_external_split(self):
+        from runtime import summarize_prompt_sources
+
+        summary = summarize_prompt_sources(
+            [
+                {"computed": 32, "local_cache_hit": 16, "external_kv_transfer": 0, "total": 48},
+                {"computed": 0, "local_cache_hit": 0, "external_kv_transfer": 64, "total": 64},
+            ]
+        )
+
+        self.assertEqual(summary["computed_tokens"], 32)
+        self.assertEqual(summary["local_cached_tokens"], 16)
+        self.assertEqual(summary["external_cached_tokens"], 64)
+        self.assertEqual(summary["total_prompt_tokens"], 112)
+        self.assertEqual(summary["total_cached_tokens"], 80)
+
+    def test_prompt_source_invariant_failure_is_rejected(self):
+        from runtime import summarize_prompt_sources
+
+        with self.assertRaises(ValueError):
+            summarize_prompt_sources(
+                [{"computed": 10, "local_cache_hit": 5, "external_kv_transfer": 0, "total": 14}]
+            )
+
+    def test_connector_stats_reduce_known_load_and_store_counters(self):
+        from runtime import reduce_connector_stats
+
+        payload = {
+            "types": {
+                "vllm:kv_offload_load_bytes": "counter",
+                "vllm:kv_offload_load_time": "counter",
+                "vllm:kv_offload_store_bytes": "counter",
+            },
+            "data": {
+                "vllm:kv_offload_load_bytes": {(): 1024},
+                "vllm:kv_offload_load_time": {(): 0.25},
+                "vllm:kv_offload_store_bytes": {(): 4096},
+            },
+        }
+
+        self.assertEqual(
+            reduce_connector_stats(payload),
+            {"load_bytes": 1024, "load_time_seconds": 0.25, "store_bytes": 4096},
+        )
+
+
+class PreflightOracleTest(unittest.TestCase):
+    def test_probe_lead_is_frozen_from_pilot_window_midpoint(self):
+        from a02 import select_probe_lead_offset
+
+        offset = select_probe_lead_offset(
+            first_token_delays=[0.10, 0.12, 0.11],
+            finish_delays=[0.40, 0.50, 0.45],
+        )
+
+        self.assertAlmostEqual(offset, 0.30)
+
+    def test_probe_preflight_requires_nine_of_ten(self):
+        from a02 import decide_probe_preflight
+
+        self.assertEqual(decide_probe_preflight([1] * 9 + [0]).status, "valid")
+        self.assertEqual(decide_probe_preflight([1] * 8 + [0, 0]).status, "workload_spec_stop")
+
+    def test_connector_preflight_requires_config_capacity_and_observed_load(self):
+        from a02 import decide_connector_preflight
+
+        passed = decide_connector_preflight(
+            resolved_connector="OffloadingConnector",
+            gpu_capacity_blocks=3151,
+            expected_gpu_capacity_blocks=3151,
+            configured_cpu_bytes=5 * (1 << 30),
+            required_cpu_bytes=4336582656,
+            external_cached_tokens=2048,
+            connector_load_bytes=2048 * 917504 // 16,
+        )
+        no_load = decide_connector_preflight(
+            resolved_connector="OffloadingConnector",
+            gpu_capacity_blocks=3151,
+            expected_gpu_capacity_blocks=3151,
+            configured_cpu_bytes=5 * (1 << 30),
+            required_cpu_bytes=4336582656,
+            external_cached_tokens=0,
+            connector_load_bytes=0,
+        )
+
+        self.assertEqual(passed.status, "valid")
+        self.assertEqual(no_load.status, "connector_observability_stop")
+        self.assertIs(passed.transfer_overlap_observable, False)
+
+
+class PreflightRunnerContractTest(unittest.TestCase):
+    def test_import_does_not_require_vllm(self):
+        namespace = runpy.run_path(
+            str(Path(__file__).with_name("run_preflight.py")),
+            run_name="a02_stock_preflight_import",
+        )
+
+        self.assertIn("run_preflight", namespace)
+
+    def test_public_cli_accepts_only_attempt(self):
+        from run_preflight import parse_args
+
+        self.assertEqual(parse_args(["--attempt", "2"]).attempt, 2)
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parse_args(["--policy", "S1"])
+
+    def test_destination_is_one_immutable_gate_bundle(self):
+        from run_preflight import destination_for
+
+        self.assertEqual(
+            destination_for(Path("raw"), 2),
+            Path("raw/preflight/preflight-a02"),
+        )
+        with self.assertRaises(ValueError):
+            destination_for(Path("raw"), 0)
+
+    def test_s1_diff_is_only_native_offloading_configuration(self):
+        from run_preflight import policy_engine_kwargs
+
+        s0 = policy_engine_kwargs("/model", "S0", 5)
+        s1 = policy_engine_kwargs("/model", "S1", 5)
+        difference = {key for key in set(s0) | set(s1) if s0.get(key) != s1.get(key)}
+
+        self.assertEqual(difference, {"kv_offloading_size", "kv_offloading_backend"})
+        self.assertEqual(s1["kv_offloading_size"], 5)
+        self.assertEqual(s1["kv_offloading_backend"], "native")
+
 if __name__ == "__main__":
     unittest.main()

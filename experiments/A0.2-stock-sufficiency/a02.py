@@ -66,6 +66,20 @@ class RunVerdict:
     foreground_path: str
 
 
+@dataclass(frozen=True)
+class ProbePreflightVerdict:
+    status: str
+    reason: str
+    live_trials: int
+
+
+@dataclass(frozen=True)
+class ConnectorPreflightVerdict:
+    status: str
+    reason: str
+    transfer_overlap_observable: bool
+
+
 def _pair_order(length: int, band: str, pair: int) -> tuple[str, str]:
     material = f"{SCHEDULE_SEED}:{length}:{band}:{pair}".encode("utf-8")
     return ("S0", "S1") if hashlib.sha256(material).digest()[0] % 2 == 0 else ("S1", "S0")
@@ -288,6 +302,65 @@ def decide_run(
     else:
         path = "partial_gpu_hit"
     return RunVerdict("valid_observation", "run is eligible for cross-run aggregation", path)
+
+
+def select_probe_lead_offset(
+    *,
+    first_token_delays: Sequence[float],
+    finish_delays: Sequence[float],
+) -> float:
+    """Freeze one lead offset at the midpoint of the pilot decode window."""
+    if (
+        not first_token_delays
+        or len(first_token_delays) != len(finish_delays)
+        or any(not isinstance(value, (int, float)) or value < 0 for value in first_token_delays)
+        or any(not isinstance(value, (int, float)) or value <= 0 for value in finish_delays)
+    ):
+        raise ValueError("pilot timings must be non-empty non-negative numeric pairs")
+    decode_start = min(float(value) for value in first_token_delays)
+    decode_end = max(float(value) for value in finish_delays)
+    if decode_end <= decode_start:
+        raise ValueError("pilot did not expose a positive decode-active window")
+    return (decode_start + decode_end) / 2
+
+
+def decide_probe_preflight(active_decode_counts: Sequence[int]) -> ProbePreflightVerdict:
+    if len(active_decode_counts) != 10 or any(type(value) is not int or value < 0 for value in active_decode_counts):
+        return ProbePreflightVerdict("invalid_run", "probe preflight requires exactly ten valid counts", 0)
+    live_trials = sum(value > 0 for value in active_decode_counts)
+    if live_trials >= 9:
+        return ProbePreflightVerdict("valid", "fixed lead offset kept a probe decode-active in at least 9/10 trials", live_trials)
+    return ProbePreflightVerdict("workload_spec_stop", "fixed lead offset failed the registered 9/10 liveness gate", live_trials)
+
+
+def decide_connector_preflight(
+    *,
+    resolved_connector: str | None,
+    gpu_capacity_blocks: int,
+    expected_gpu_capacity_blocks: int,
+    configured_cpu_bytes: int,
+    required_cpu_bytes: int,
+    external_cached_tokens: int | None,
+    connector_load_bytes: int,
+) -> ConnectorPreflightVerdict:
+    values = (
+        gpu_capacity_blocks,
+        expected_gpu_capacity_blocks,
+        configured_cpu_bytes,
+        required_cpu_bytes,
+        connector_load_bytes,
+    )
+    if any(type(value) is not int or value < 0 for value in values):
+        return ConnectorPreflightVerdict("invalid_configuration", "malformed connector capacity evidence", False)
+    if (
+        resolved_connector != "OffloadingConnector"
+        or gpu_capacity_blocks != expected_gpu_capacity_blocks
+        or configured_cpu_bytes < required_cpu_bytes
+    ):
+        return ConnectorPreflightVerdict("invalid_configuration", "resolved connector, GPU capacity, or CPU tier differs from calibration", False)
+    if type(external_cached_tokens) is not int or external_cached_tokens <= 0 or connector_load_bytes <= 0:
+        return ConnectorPreflightVerdict("connector_observability_stop", "controlled load did not expose external cached tokens plus load bytes", False)
+    return ConnectorPreflightVerdict("valid", "native connector configuration and controlled load are observable", False)
 
 
 def build_calibration(
