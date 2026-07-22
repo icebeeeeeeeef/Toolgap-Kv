@@ -128,8 +128,11 @@ R1 load 与 active probe decode 的时间重叠证据。
 
 - connector/config/capacity 无法成立：停止 A0.2，记录 `invalid_configuration`；
 - native load 可发生但无可维护的 load start/end 或与 R1 的关联证据：允许继续 matrix 的
-  hit/miss 观察；Stop 条件 3、Continue 条件 2 和基于 active-tail reversal 的 Continue 条件 3
-  不可用。若出现无法解释的 active-tail 差异，cell 必须是 `inconclusive`，不得借此进入 A1。
+  hit/miss 观察；Stop 条件 3 与 directional trade-off Continue 条件 2 不可用。原 spec 的
+  Continue 条件 3 是 foreground resume direction reversal，不依赖 active-probe/restore
+  overlap，仍按“至少两个 material cell、各 cell 至少 4/5 配对”的原规则独立判定。若出现无法
+  解释的 active-tail 差异，cell 必须是 `inconclusive`，不得借此构成 directional trade-off
+  证据或进入 A1。
 
 ### Gate 2：active-probe timing
 
@@ -194,9 +197,10 @@ S0 writes `connector.json` with explicit `disabled` status rather than omitting 
 2. cached counter 缺失、非 block-aligned、超过 192/实际 prompt 长度：
    `accounting_contract_change`，暂停 matrix；
 3. builder/probe 先决条件失败：cell `inconclusive`，不选择性补跑；
-4. `transfer_overlap_observable=false`：不阻止记录 S1 hit/miss，但禁止 Stop 条件 3、
-   directional trade-off Continue 条件 2 与 active-tail reversal Continue 条件 3；无可归因
-   active-tail 差异必须为 `inconclusive`；
+4. `transfer_overlap_observable=false`：不阻止记录 S1 hit/miss，但禁止 Stop 条件 3 与
+   directional trade-off Continue 条件 2。foreground resume reversal Continue 条件 3 仍按原
+   spec 独立判定；无可归因的 active-tail 差异必须为 `inconclusive`，且不得作为
+   directional trade-off 证据；
 5. 只有有效 runs 才进入原有 `theta`、4/5 pair consistency 与跨 cell 判断。
 
 ## 7. 测试与实现顺序
