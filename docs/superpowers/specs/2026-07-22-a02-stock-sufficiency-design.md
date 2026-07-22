@@ -37,6 +37,8 @@ VLLM_KV_CACHE_LAYOUT=HND
 
 S0 和 S1 都必须在 fresh OS process 内启动。manifest 保存环境变量、resolved layout、block
 size、GPU block capacity 和 page/block bytes。若任一项不同，comparative run 为 `invalid_run`。
+因此本实验的 S0 口径是“stock APC under HND fairness constraint”，不是声称绝对默认 NHD
+配置；后续 A1 必须复用这一同口径的 S0/S1 comparator。
 
 ### 2.2 S1 只使用原生配置路径
 
@@ -105,18 +107,29 @@ prefix 共享。
 输出 `calibration.json`，冻结：三个 `M={0.50,1.10,1.30}` 对应的 `floor(M*C_blocks)`、payload
 hash 和 S1 所需 CPU GiB。它不提交 R1、不产出 S0/S1 胜负、不运行 90-run matrix。
 
-### Gate 1：S1 connector observability
+### Gate 1：S1 connector 配置与观测边界
 
 S1/HND fresh process 验证 native config 实际创建 `OffloadingConnector`，CPU capacity 不小于
-calibration 导出的下界，并执行一个受控 store/load 观察。connector aggregation stats 的读取会
-清空当前 counters，故 preflight 只能登记一个固定的 post-R1 snapshot 点，不能在一次 run 中
-轮询后再把累积数解释为单次 transfer。
+calibration 导出的下界，并执行一个受控 store/load 观察。
+
+源码审计在当前 pin 下未发现可维护的 per-load 区间 seam：
+
+- `offloading/common.py:DirectionalTransferStats` 只保存累计 `bytes`、`time` 与 sizes；
+- worker `get_finished()` 只在 transfer 完成后把 `transfer_size` 与 `transfer_time` 累加；
+- KV cache event 是 block store/remove payload；其 batch timestamp 是 publish 时刻，不是 load
+  start/end，也不携带 request-scoped transfer interval；
+- scheduler-side connector stats 的读取会清空当前累计 counters。
+
+故本 pin 的 `transfer_overlap_observable` 预注册为 `false`。每个 S1 run 仍保存一个固定
+post-R1 stats snapshot，作为“本 run 发生 native load/store 工作”的辅助证据；它不得被解释为
+R1 load 与 active probe decode 的时间重叠证据。
 
 该 gate 的结果分两类：
 
 - connector/config/capacity 无法成立：停止 A0.2，记录 `invalid_configuration`；
 - native load 可发生但无可维护的 load start/end 或与 R1 的关联证据：允许继续 matrix 的
-  hit/miss 观察，但所有依赖 restore/probe overlap 的 Continue 判据固定为 `inconclusive`。
+  hit/miss 观察；Stop 条件 3、Continue 条件 2 和基于 active-tail reversal 的 Continue 条件 3
+  不可用。若出现无法解释的 active-tail 差异，cell 必须是 `inconclusive`，不得借此进入 A1。
 
 ### Gate 2：active-probe timing
 
@@ -181,8 +194,9 @@ S0 writes `connector.json` with explicit `disabled` status rather than omitting 
 2. cached counter 缺失、非 block-aligned、超过 192/实际 prompt 长度：
    `accounting_contract_change`，暂停 matrix；
 3. builder/probe 先决条件失败：cell `inconclusive`，不选择性补跑；
-4. connector transfer time 不可见：不阻止记录 S1 hit/miss，但禁止以 directional trade-off
-   进入 A1；
+4. `transfer_overlap_observable=false`：不阻止记录 S1 hit/miss，但禁止 Stop 条件 3、
+   directional trade-off Continue 条件 2 与 active-tail reversal Continue 条件 3；无可归因
+   active-tail 差异必须为 `inconclusive`；
 5. 只有有效 runs 才进入原有 `theta`、4/5 pair consistency 与跨 cell 判断。
 
 ## 7. 测试与实现顺序
