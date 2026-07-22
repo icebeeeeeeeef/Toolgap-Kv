@@ -282,5 +282,126 @@ class FixturePreparationRunnerContractTest(unittest.TestCase):
             parse_args(["--target", "2048", "--output", "x.json", "--padding", "override"])
 
 
+class QualificationRunnerContractTest(unittest.TestCase):
+    def load_runner(self):
+        return runpy.run_path(
+            str(EXPERIMENT_DIR / "run_qualification.py"),
+            run_name="a02_foreground_qualification_runner_test",
+        )
+
+    def test_import_does_not_require_vllm(self):
+        self.assertIn("run_parent", self.load_runner())
+
+    def test_public_cli_accepts_only_target_and_attempt(self):
+        parse_args = self.load_runner()["parse_args"]
+        args = parse_args(["--target", "2048", "--attempt", "1"])
+        self.assertEqual((args.target, args.attempt), (2048, 1))
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parse_args(["--target", "2048", "--attempt", "1", "--seed", "7"])
+
+    def test_destination_encodes_target_and_attempt(self):
+        destination_for = self.load_runner()["destination_for"]
+        self.assertEqual(
+            destination_for(Path("raw"), 8192, 2),
+            Path("raw/qualification/L8192/qualification-a02"),
+        )
+
+    def test_worker_environment_forces_hnd_layout(self):
+        worker_environment = self.load_runner()["worker_environment"]
+        self.assertEqual(
+            worker_environment({"UNCHANGED": "yes"}),
+            {"UNCHANGED": "yes", "VLLM_KV_CACHE_LAYOUT": "HND"},
+        )
+
+    def test_all_three_tracked_fixture_paths_are_fixed(self):
+        tracked_fixture_paths = self.load_runner()["tracked_fixture_paths"]
+        self.assertEqual(
+            tracked_fixture_paths(),
+            (
+                Path("fixtures/foreground-2048.json"),
+                Path("fixtures/foreground-8192.json"),
+                Path("fixtures/foreground-16384.json"),
+            ),
+        )
+
+
+class QualificationWorkerReductionTest(unittest.TestCase):
+    @staticmethod
+    def worker_records() -> list[dict[str, object]]:
+        prompt_ids = list(range(2035))
+        completion_ids = list(range(5000, 5020))
+        r0 = {
+            "prompt_token_ids": prompt_ids,
+            "completion_token_ids": completion_ids,
+            "num_cached_tokens": 0,
+        }
+        records = [
+            {"worker_index": index, "status": "ok", "r0": r0}
+            for index in range(1, 6)
+        ]
+        records[-1] = {
+            "worker_index": 5,
+            "status": "ok",
+            "r0": r0,
+            "r1": {
+                "prompt_token_ids": prompt_ids + completion_ids + [6000, 6001],
+                "completion_token_ids": [7000],
+                "num_cached_tokens": 2048,
+                "r0_span": [2035, 2055],
+                "r1_span": [2035, 2055],
+                "parser_structures_equal": True,
+                "block_size": 16,
+            },
+        }
+        return records
+
+    def test_reduction_derives_admission_from_engine_owned_id_sequences(self):
+        from run_qualification import reduce_worker_records
+
+        verdict, evidence = reduce_worker_records(2048, self.worker_records())
+
+        self.assertEqual(verdict.status, "admission_pass")
+        self.assertEqual(evidence["lcp"], 2055)
+        self.assertTrue(evidence["semantic_span_equal"])
+        self.assertEqual(evidence["r0_completion_id_sequences"], [list(range(5000, 5020))] * 5)
+
+    def test_reduction_preserves_child_failure_as_invalid_run(self):
+        from run_qualification import reduce_worker_records
+
+        records = self.worker_records()
+        records[2] = {"worker_index": 3, "status": "failure", "error": "engine failed"}
+        verdict, evidence = reduce_worker_records(2048, records)
+
+        self.assertEqual(verdict.status, "invalid_run")
+        self.assertEqual(evidence["worker_failure"], "engine failed")
+
+    def test_reduction_rejects_parser_structure_mismatch_before_token_verdict(self):
+        from run_qualification import reduce_worker_records
+
+        records = self.worker_records()
+        records[-1]["r1"]["parser_structures_equal"] = False
+        verdict, _ = reduce_worker_records(2048, records)
+
+        self.assertEqual(verdict.status, "invalid_run")
+
+    def test_reduction_preserves_malformed_r0_accounting_as_contract_change(self):
+        from run_qualification import reduce_worker_records
+
+        records = self.worker_records()
+        records[1]["r0"]["num_cached_tokens"] = None
+        verdict, _ = reduce_worker_records(2048, records)
+
+        self.assertEqual(verdict.status, "accounting_contract_change")
+
+    def test_reduction_keeps_empty_semantic_span_as_invalid_run(self):
+        from run_qualification import reduce_worker_records
+
+        records = self.worker_records()
+        records[-1]["r1"]["r0_span"] = [2035, 2035]
+        verdict, _ = reduce_worker_records(2048, records)
+
+        self.assertEqual(verdict.status, "invalid_run")
+
+
 if __name__ == "__main__":
     unittest.main()
