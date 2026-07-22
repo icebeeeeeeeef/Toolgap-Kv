@@ -29,14 +29,15 @@ revision, or a tool-call ID.
    then the smaller archival record count. If the pinned tokenizer cannot reach
    that window, stop: do not alter padding after the result.
 
-3. Run qualification one target at a time. The future runner will use five
-   sequential fresh processes, preserve raw bundles under `raw/`, and promote
-   only an `admission_pass` bundle into `anchors/foreground-<L>.json`.
+3. Qualification has passed for all three targets. The five-process runner
+   preserved raw bundles under `raw/`; only an `admission_pass` bundle was
+   promoted into `anchors/foreground-<L>.json`. See
+   [the reviewed result record](A0.2-foreground-length-qualification-results-2026-07-23.md).
 
-4. Begin the A0.2 comparative matrix only after all three anchors have been
-   independently reviewed and committed. Until then A0.2 remains `roadmap`;
-   this directory makes no cache-miss, offload, latency, throughput, or
-   lifecycle-runtime claim.
+4. All three anchors are independently reviewed and committed. A0.2 remains
+   `roadmap` until its comparative runner, calibration and preflights are
+   implemented and reviewed; this directory makes no cache-miss, offload,
+   latency, throughput, or lifecycle-runtime claim.
 
 ## Local checks
 

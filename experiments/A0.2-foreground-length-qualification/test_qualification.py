@@ -15,6 +15,9 @@ from toolgap_kv.a01 import Span
 
 
 EXPERIMENT_DIR = Path(__file__).resolve().parent
+REPOSITORY_ROOT = EXPERIMENT_DIR.parent.parent
+A02_SPEC = REPOSITORY_ROOT / "experiments/0001-mechanism-feasibility/A0.2-stock-sufficiency-spec.md"
+A02_DESIGN = REPOSITORY_ROOT / "docs/superpowers/specs/2026-07-22-a02-stock-sufficiency-design.md"
 
 
 def _compact_sha256(value: object) -> str:
@@ -248,6 +251,22 @@ class AnchorPromotionCliTest(unittest.TestCase):
             root = Path(directory)
             with self.assertRaises(ValueError):
                 promote(8192, self.write_bundle(root, _passing_bundle()), root / "foreground-8192.json")
+
+
+class A02DocumentationContractTest(unittest.TestCase):
+    def test_a02_documents_consume_qualified_foreground_anchors(self):
+        spec_text = A02_SPEC.read_text(encoding="utf-8")
+        design_text = A02_DESIGN.read_text(encoding="utf-8")
+
+        for text in (spec_text, design_text):
+            for target in (2048, 8192, 16384):
+                self.assertIn("anchors/foreground-{}.json".format(target), text)
+            self.assertIn(
+                "builder_target_blocks = floor(M * gpu_capacity_blocks) - foreground_full_prefix_blocks",
+                text,
+            )
+            self.assertIn("AB/BA is a pair-order attribute", text)
+        self.assertIn("foreground resume reversal Continue 条件 3", design_text)
 
 
 class LengthQualificationRunnerPromotionContractTest(unittest.TestCase):

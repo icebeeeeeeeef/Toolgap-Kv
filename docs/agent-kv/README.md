@@ -2,15 +2,18 @@
 
 > Status: `roadmap`
 >
-> Last reviewed: 2026-07-22
+> Last reviewed: 2026-07-23
 >
 > Engine-independent Phase 0 contracts, seven domain-contract tests, and three
 > repository-validator regression tests are `shipped` (ten local tests total).
 > A0.1 has one real-GPU, pinned-vLLM `experimentally validated` negative
 > full-block coverage result; the separate A0.1R experiment has a three-ordinal
-> stock-APC admission result for its eligible 192-token prefix. A0.2 remains
-> blocked on a chunked-prefill configuration audit. No lifecycle runtime,
-> APC/CPU-offload path, measured resume metric, or performance claim exists.
+> stock-APC admission result for its eligible 192-token prefix. The separate
+> foreground-length qualification has experimentally validated and committed
+> three A0.2 foreground input anchors (`L=2048/8192/16384`) under the supported
+> chunked-prefill/HND pin. A0.2 itself remains `roadmap`: no capacity-pressure
+> matrix, APC/CPU-offload comparison, measured resume metric, performance claim,
+> or lifecycle runtime exists.
 
 ## One-Sentence Definition
 
