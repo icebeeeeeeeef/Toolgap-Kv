@@ -41,7 +41,8 @@ superseded: replaced by a later decision
 | D023 | Run a Gate B0 static-baseline admission audit after CT3 and before CT4 | accepted | Dynamic selection cannot be justified before comparison with the strongest fair static baseline; use tuned TTL only when the pinned runtime supports fair semantics, otherwise use an action-only/static substitute or record a missing contract | A later runtime exposes a stronger fair baseline, which must replace the substitute |
 | D024 | Require a candidate-owned in-process logical lifecycle runtime for CT1-CT3 completion | accepted | The 2026-07-13 policy reduction accidentally allowed thin tracing to appear sufficient; runtime-project credibility requires owned lifecycle behavior, not only observation | Gate A proves no maintainable non-duplicative transition, fallback, or cleanup contract can be owned; then stop/reselect rather than downgrade silently |
 | D025 | Reuse vLLM's physical KV data plane | accepted | Candidate ownership is lifecycle semantics and orchestration; rebuilding shared-block/refcount, PagedAttention, model execution, or D2H/H2D transfer adds scope without stronger interview evidence | A source-audited missing physical contract is reproduced and independently approved |
-| D026 | Stop the A0.2/A1 branch after the A0.1 full-block coverage failure | accepted | The final real-GPU A0.1 run preserves semantic tool-call token equality but its reusable full-block ceiling is `192 < a_end 198`; the A0.2 input contract is therefore false | A newly reviewed ticket defines a different canonicalization question or reselects the project mainline without changing this fixture to chase alignment |
+| D026 | Stop the A0.2/A1 branch after the A0.1 full-block coverage failure | superseded | The final real-GPU A0.1 run preserves semantic tool-call token equality but its reusable full-block ceiling is `192 < a_end 198`; the A0.2 input contract was therefore false under the original full-span coverage interpretation | Superseded by D027 after the separately reviewed A0.1R admission experiment directly observed stock APC materializing the eligible 192-token prefix |
+| D027 | Reopen A0.2 for configuration-gated review after A0.1R stock-APC admission | accepted | Three independent pinned-vLLM A0.1R ordinals observed `R0.cached=0` and `R1.cached=192=C`; this directly disproves the interpretation that stock APC cannot materialize the canonical pair's eligible full-block prefix | The chunked-prefill source/runtime audit fails to establish a safe frozen A0.2 scheduler pin, or A0.2 finds no attributable/economically meaningful miss |
 
 ## Rejected Directions
 
@@ -189,6 +190,10 @@ Scope impact:
 
 ## 2026-07-22 A0.1 Full-Block Stop Record
 
+> Historical record: D026 is preserved below unchanged. Its current status is
+> `superseded` by D027; this record remains the source for the original A0.1
+> full-span coverage result.
+
 ```text
 Decision ID: D026
 
@@ -218,4 +223,42 @@ Updated decision:
 Scope impact:
 - The project has one experimentally validated negative applicability result,
   not a completed lifecycle runtime or a performance claim.
+```
+
+## 2026-07-22 A0.1R Stock-APC Admission Record
+
+```text
+Decision ID: D027
+
+New evidence:
+- A0.1R consumed the frozen A0.1 fixture and the 192-token prefix anchor without
+  changing the A0.1 raw bundle or padding the fixture.
+- On the NVIDIA A10, the pinned vLLM 0.25.1 commit
+  752a3a504485790a2e8491cacbb35c137339ad34, and the pinned Qwen2.5-7B
+  revision, three independent cold LLM ordinals each observed R0 cached tokens
+  equal to 0 and R1 cached tokens equal to the eligible complete prefix C=192.
+- Each ordinal retained LCP=199, semantic_span_equal=true, identical tracked
+  input hashes, and a complete locally retained raw bundle. Exact hashes and
+  execution boundaries are recorded in
+  experiments/A0.1R-partial-block-residual/A0.1R-results-2026-07-22.md.
+
+Previous assumption:
+- D026 treated full-span coverage failure (192 < a_end 198) as a false A0.2
+  input contract, so it stopped A0.2/A1 on this fixture and pin.
+
+Updated decision:
+- Preserve D026's A0.1 full-span coverage result and prohibit fixture padding.
+- Treat stock APC admission of the eligible 192-token complete prefix as
+  experimentally validated on this fixed no-pressure canonical pair.
+- A0.2 may be redesigned and reviewed again, but must not execute until a
+  source/runtime audit freezes a supported chunked-prefill scheduler pin and
+  reconfirms the accounting mapping for that pin.
+- This evidence does not authorize an offload policy, performance claim, or
+  candidate-owned lifecycle runtime implementation.
+
+Scope impact:
+- The project has one A0.1 negative full-span coverage artifact and one A0.1R
+  positive stock-APC admission artifact; they answer different questions.
+- The next allowed work is configuration-risk closure followed by reviewed A0.2
+  stock-sufficiency experimentation, not A1 or runtime implementation.
 ```

@@ -7,8 +7,10 @@
 > Engine-independent Phase 0 contracts, seven domain-contract tests, and three
 > repository-validator regression tests are `shipped` (ten local tests total).
 > A0.1 has one real-GPU, pinned-vLLM `experimentally validated` negative
-> full-block applicability result. No lifecycle runtime, APC/CPU-offload path,
-> measured resume metric, or performance claim exists.
+> full-block coverage result; the separate A0.1R experiment has a three-ordinal
+> stock-APC admission result for its eligible 192-token prefix. A0.2 remains
+> blocked on a chunked-prefill configuration audit. No lifecycle runtime,
+> APC/CPU-offload path, measured resume metric, or performance claim exists.
 
 ## One-Sentence Definition
 
@@ -36,19 +38,21 @@ success condition.
 4. [ROADMAP.md](ROADMAP.md): Gate A, evidence phases, Gate B, and stop branches.
 5. [../../experiments/0001-mechanism-feasibility/README.md](../../experiments/0001-mechanism-feasibility/README.md):
    the first executable evidence protocol.
-6. [ARCHITECTURE.md](ARCHITECTURE.md): proposed components, lifecycle contracts,
+6. [../../experiments/A0.1R-partial-block-residual/A0.1R-results-2026-07-22.md](../../experiments/A0.1R-partial-block-residual/A0.1R-results-2026-07-22.md):
+   the real-GPU stock-APC admission result and its strict boundary.
+7. [ARCHITECTURE.md](ARCHITECTURE.md): proposed components, lifecycle contracts,
    decision path, and failure semantics.
-7. [EVALUATION.md](EVALUATION.md): hypotheses, baselines, workloads, metrics,
+8. [EVALUATION.md](EVALUATION.md): hypotheses, baselines, workloads, metrics,
    bounds, negative cases, and evidence rules.
-8. [INTERVIEW_MAP.md](INTERVIEW_MAP.md): decision-card registry, organic hooks,
+9. [INTERVIEW_MAP.md](INTERVIEW_MAP.md): decision-card registry, organic hooks,
    claim trees, and evidence gates.
-9. [NARRATIVE.md](NARRATIVE.md): candidate story, ownership boundary, interview
+10. [NARRATIVE.md](NARRATIVE.md): candidate story, ownership boundary, interview
    framing, and resume templates.
-10. [interview-grill/README.md](interview-grill/README.md): adversarial TL
+11. [interview-grill/README.md](interview-grill/README.md): adversarial TL
    questions, evidence-gated answers, and mock-interview maintenance workflow.
-11. [RELATED_WORK.md](RELATED_WORK.md): direct predecessors, adjacent systems,
+12. [RELATED_WORK.md](RELATED_WORK.md): direct predecessors, adjacent systems,
    vLLM status, and fidelity rules.
-12. [DECISIONS.md](DECISIONS.md): accepted, deferred, rejected, and superseded decisions.
+13. [DECISIONS.md](DECISIONS.md): accepted, deferred, rejected, and superseded decisions.
 
 ## Current Snapshot
 
@@ -57,13 +61,13 @@ success condition.
 | Core problem | Defined |
 | Engine-independent contracts | `shipped`: events/actions/DecisionTrace scaffolding and tests |
 | Runtime architecture | `roadmap`: proposed only |
-| vLLM target commit | A0.1 only: `752a3a504485790a2e8491cacbb35c137339ad34` (`vLLM 0.25.1`) |
-| Hardware | A0.1 only: NVIDIA A10; driver `580.126.09`; Torch CUDA `13.0` |
+| vLLM target commit | A0.1/A0.1R: `752a3a504485790a2e8491cacbb35c137339ad34` (`vLLM 0.25.1`) |
+| Hardware | A0.1/A0.1R: NVIDIA A10; driver `580.126.09`; Torch CUDA `13.0` |
 | Workload | Candidate sources identified; no replay built |
-| Runtime code | `shipped`: engine-independent Phase 0 plus one A0.1 measurement harness; no candidate-owned lifecycle runtime |
-| Benchmark data | `experimentally validated` negative A0.1 artifact, locally retained under `experiments/0001-mechanism-feasibility/raw/a0.1/`; hashes and command are tracked in [A0.1 results](../../experiments/0001-mechanism-feasibility/A0.1-results-2026-07-22.md) |
+| Runtime code | `shipped`: engine-independent Phase 0 plus A0.1/A0.1R measurement harnesses; no candidate-owned lifecycle runtime |
+| Benchmark data | `experimentally validated`: negative A0.1 full-span coverage artifact and three-ordinal A0.1R stock-APC admission artifact; raw bundles are locally retained and their hashes/commands are tracked in [A0.1 results](../../experiments/0001-mechanism-feasibility/A0.1-results-2026-07-22.md) and [A0.1R results](../../experiments/A0.1R-partial-block-residual/A0.1R-results-2026-07-22.md) |
 | Simulator data | None |
-| Resume claim | No positive runtime or performance bullet allowed; only the narrow A0.1 negative applicability finding may be discussed with its testbed boundary |
+| Resume claim | No positive runtime or performance bullet allowed; only the narrow A0.1/A0.1R applicability findings may be discussed with their testbed boundaries |
 
 ## Core Glossary
 
