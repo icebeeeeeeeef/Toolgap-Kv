@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from importlib import metadata as importlib_metadata
 import json
 from pathlib import Path
 import subprocess
@@ -128,20 +129,39 @@ def _parse_one_tool_call(parser: Any, text: str) -> Dict[str, Any]:
 
 
 def _pinned_vllm_commit(vllm_module: Any) -> Tuple[str, str]:
+    source_roots = [Path(path).resolve() for path in getattr(vllm_module, "__path__", ())]
     module_file = getattr(vllm_module, "__file__", None)
-    if not module_file:
+    if module_file:
+        source_roots.append(Path(module_file).resolve().parents[1])
+    if not source_roots:
         raise RuntimeError("vLLM module does not expose an import path")
-    source_root = Path(module_file).resolve().parents[1]
-    result = subprocess.run(
-        ["git", "-C", str(source_root), "rev-parse", "HEAD"],
-        check=False,
-        capture_output=True,
-        text=True,
+
+    observed = []
+    for source_root in dict.fromkeys(source_roots):
+        result = subprocess.run(
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        commit = result.stdout.strip()
+        if result.returncode == 0:
+            observed.append(commit)
+            if commit == VLLM_COMMIT:
+                return commit, str(source_root)
+    raise RuntimeError(
+        "expected vLLM commit {}, got {}".format(VLLM_COMMIT, observed)
     )
-    commit = result.stdout.strip()
-    if result.returncode != 0 or commit != VLLM_COMMIT:
-        raise RuntimeError("expected vLLM commit {}, got {}".format(VLLM_COMMIT, commit))
-    return commit, str(source_root)
+
+
+def _require_vllm_version() -> str:
+    distribution_version = importlib_metadata.version("vllm")
+    semantic_version = distribution_version.split("+", 1)[0]
+    if semantic_version != VLLM_VERSION:
+        raise RuntimeError(
+            "expected vLLM {}, got {}".format(VLLM_VERSION, distribution_version)
+        )
+    return distribution_version
 
 
 def _gpu_provenance() -> Dict[str, Any]:
@@ -263,6 +283,7 @@ def _base_manifest(
     input_hashes: Mapping[str, str],
     fixture_hash: str,
     tools_hash: str,
+    vllm_distribution_version: str,
     vllm_commit: str,
     vllm_source_root: str,
     gpu: Mapping[str, Any],
@@ -279,7 +300,12 @@ def _base_manifest(
         "fixture": {"path": str(FIXTURE.relative_to(REPOSITORY_ROOT)), "expected_sha256": FIXTURE_SHA256, "actual_sha256": fixture_hash},
         "tools": {"expected_sha256": TOOLS_SHA256, "actual_sha256": tools_hash},
         "prefix_anchor": {"path": str(PREFIX_ANCHOR.relative_to(REPOSITORY_ROOT)), "sha256": _sha256_bytes(PREFIX_ANCHOR.read_bytes())},
-        "vllm": {"version": VLLM_VERSION, "commit": vllm_commit, "source_root": vllm_source_root},
+        "vllm": {
+            "version": VLLM_VERSION,
+            "distribution_version": vllm_distribution_version,
+            "commit": vllm_commit,
+            "source_root": vllm_source_root,
+        },
         "model": {"name": MODEL, "revision": MODEL_REVISION, "tokenizer_revision": MODEL_REVISION},
         "engine": {"prefix_caching": True, "chunked_prefill": False, "speculative_decoding": False, "connector": None},
         "gpu": dict(gpu),
@@ -343,8 +369,7 @@ def run_task0(ordinal: int, attempt: int, destination: Path) -> str:
     import vllm
     from vllm import LLM, SamplingParams
 
-    if vllm.__version__ != VLLM_VERSION:
-        raise RuntimeError("expected vLLM {}, got {}".format(VLLM_VERSION, vllm.__version__))
+    vllm_distribution_version = _require_vllm_version()
     vllm_commit, vllm_source_root = _pinned_vllm_commit(vllm)
     llm = LLM(
         model=MODEL,
@@ -383,6 +408,7 @@ def run_task0(ordinal: int, attempt: int, destination: Path) -> str:
         input_hashes=input_hashes,
         fixture_hash=fixture_hash,
         tools_hash=tools_hash,
+        vllm_distribution_version=vllm_distribution_version,
         vllm_commit=vllm_commit,
         vllm_source_root=vllm_source_root,
         gpu=gpu,

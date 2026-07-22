@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from toolgap_kv.a01 import Span
 from task0 import TASK0_BUNDLE_FILES, Task0Anchor, decide_task0, write_task0_bundle
@@ -193,6 +195,22 @@ class Task0RunnerContractTest(unittest.TestCase):
 
     def test_import_does_not_require_vllm(self):
         self.assertIn("main", self.load_runner())
+
+    def test_namespace_vllm_accepts_cuda_build_metadata_and_resolves_git_root(self):
+        module = self.load_runner()
+        namespace_vllm = SimpleNamespace(__file__=None, __path__=["/root/vllm"])
+        completed = SimpleNamespace(
+            returncode=0,
+            stdout=module["VLLM_COMMIT"] + "\n",
+        )
+        with patch.object(module["importlib_metadata"], "version", return_value="0.25.1+cu128"):
+            self.assertEqual(module["_require_vllm_version"](), "0.25.1+cu128")
+        with patch.object(module["subprocess"], "run", return_value=completed) as run:
+            self.assertEqual(
+                module["_pinned_vllm_commit"](namespace_vllm),
+                (module["VLLM_COMMIT"], "/root/vllm"),
+            )
+        self.assertEqual(run.call_args.args[0][:3], ["git", "-C", "/root/vllm"])
 
     def test_cli_has_no_pressure_or_policy_surface(self):
         parse_args = self.load_runner()["parse_args"]
