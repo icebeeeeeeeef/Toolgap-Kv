@@ -488,6 +488,9 @@ def _worker_main(args: argparse.Namespace) -> int:
 
 
 def _worker_result(stdout: str, worker_index: int, returncode: int, stderr: str, pid: int) -> dict[str, Any]:
+    stdout_tail = "\n".join(
+        line for line in stdout.splitlines() if not line.startswith(WORKER_RESULT_PREFIX)
+    )[-4000:]
     for line in reversed(stdout.splitlines()):
         if line.startswith(WORKER_RESULT_PREFIX):
             try:
@@ -495,6 +498,9 @@ def _worker_result(stdout: str, worker_index: int, returncode: int, stderr: str,
             except json.JSONDecodeError:
                 break
             if isinstance(record, dict):
+                record["process_returncode"] = returncode
+                record["process_stderr_tail"] = stderr[-4000:]
+                record["process_stdout_tail"] = stdout_tail
                 return record
     return {
         "worker_index": worker_index,
@@ -503,6 +509,9 @@ def _worker_result(stdout: str, worker_index: int, returncode: int, stderr: str,
         "error": "worker process returned {} without a parseable result; stderr={}".format(
             returncode, stderr[-4000:]
         ),
+        "process_returncode": returncode,
+        "process_stderr_tail": stderr[-4000:],
+        "process_stdout_tail": stdout_tail,
     }
 
 

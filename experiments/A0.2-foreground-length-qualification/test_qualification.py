@@ -324,6 +324,21 @@ class QualificationRunnerContractTest(unittest.TestCase):
             ),
         )
 
+    def test_parsed_worker_result_retains_stderr_tail_for_raw_evidence(self):
+        runner = self.load_runner()
+        worker_result = runner["_worker_result"]
+        prefix = runner["WORKER_RESULT_PREFIX"]
+
+        record = worker_result(
+            prefix + '{"worker_index":1,"status":"failure","error":"engine failed"}',
+            1,
+            0,
+            "engine-core root cause",
+            123,
+        )
+
+        self.assertEqual(record["process_stderr_tail"], "engine-core root cause")
+
 
 class QualificationWorkerReductionTest(unittest.TestCase):
     @staticmethod
