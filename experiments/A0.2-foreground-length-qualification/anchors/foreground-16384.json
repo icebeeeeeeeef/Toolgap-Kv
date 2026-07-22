@@ -1,0 +1,16 @@
+{
+  "block_size": 16,
+  "eligible_prefix_sha256": "b02fd68af6a35778a381993e686d3e98b10f9e50eaa46da97c3c34daebd8d941",
+  "lcp": 16390,
+  "r0_span": [
+    16369,
+    16389
+  ],
+  "r1_span": [
+    16369,
+    16389
+  ],
+  "schema_version": 1,
+  "source_bundle_sha256": "57ce4bc1676660969df0cadea73a6d2ee90e2309c3a82784b69924a39352656d",
+  "target_full_prefix_tokens": 16384
+}

@@ -188,6 +188,68 @@ class LengthQualificationPromotionTest(unittest.TestCase):
             promoted_anchor_from_bundle(_passing_bundle(status="fixture_qualification_stop"))
 
 
+class AnchorPromotionCliTest(unittest.TestCase):
+    @staticmethod
+    def write_bundle(root: Path, bundle: dict[str, object]) -> Path:
+        directory = root / "bundle"
+        directory.mkdir()
+        for name, value in bundle.items():
+            (directory / name).write_text(
+                json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        return directory
+
+    def test_promote_writes_exact_anchor_from_passing_bundle(self):
+        from promote_anchors import promote
+
+        bundle = _passing_bundle()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "foreground-2048.json"
+
+            anchor = promote(2048, self.write_bundle(root, bundle), output)
+
+            self.assertEqual(anchor, json.loads(output.read_text(encoding="utf-8")))
+            self.assertEqual(anchor["target_full_prefix_tokens"], 2048)
+            self.assertEqual(anchor["r0_span"], [2035, 2055])
+            self.assertEqual(
+                anchor["eligible_prefix_sha256"],
+                _compact_sha256(bundle["r1.json"]["prompt_token_ids"][:2048]),
+            )
+
+    def test_promote_refuses_non_pass_bundle(self):
+        from promote_anchors import promote
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaises(ValueError):
+                promote(
+                    2048,
+                    self.write_bundle(root, _passing_bundle(status="fixture_qualification_stop")),
+                    root / "foreground-2048.json",
+                )
+
+    def test_promote_refuses_existing_output(self):
+        from promote_anchors import promote
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "foreground-2048.json"
+            output.write_text("already exists\n", encoding="utf-8")
+
+            with self.assertRaises(FileExistsError):
+                promote(2048, self.write_bundle(root, _passing_bundle()), output)
+
+    def test_promote_rejects_requested_target_mismatch(self):
+        from promote_anchors import promote
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaises(ValueError):
+                promote(8192, self.write_bundle(root, _passing_bundle()), root / "foreground-8192.json")
+
+
 class LengthQualificationRunnerPromotionContractTest(unittest.TestCase):
     def test_runner_bundle_with_list_spans_promotes(self):
         from qualification import promoted_anchor_from_bundle
