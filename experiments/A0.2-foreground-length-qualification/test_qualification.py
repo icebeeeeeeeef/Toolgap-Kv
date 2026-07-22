@@ -188,6 +188,28 @@ class LengthQualificationPromotionTest(unittest.TestCase):
             promoted_anchor_from_bundle(_passing_bundle(status="fixture_qualification_stop"))
 
 
+class LengthQualificationRunnerPromotionContractTest(unittest.TestCase):
+    def test_runner_bundle_with_list_spans_promotes(self):
+        from qualification import promoted_anchor_from_bundle
+        from run_qualification import _bundle_files, reduce_worker_records
+
+        records = QualificationWorkerReductionTest.worker_records()
+        verdict, evidence = reduce_worker_records(2048, records)
+        bundle = _bundle_files(
+            {"experiment": "A0.2-foreground-length-qualification"},
+            {"target_full_prefix_tokens": 2048},
+            records,
+            verdict,
+            evidence,
+        )
+
+        self.assertEqual(bundle["verdict.json"]["r0_span"], [2035, 2055])
+        self.assertEqual(
+            promoted_anchor_from_bundle(bundle)["r0_span"],
+            [2035, 2055],
+        )
+
+
 class FixturePreparationTest(unittest.TestCase):
     @staticmethod
     def base_fixture() -> dict[str, object]:

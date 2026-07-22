@@ -203,10 +203,13 @@ def write_bundle(destination: Path, files: Mapping[str, Any]) -> None:
         raise
 
 
-def _span_from_mapping(value: Any, name: str) -> list[int]:
-    if not isinstance(value, Mapping):
-        raise ValueError("{} must be a mapping".format(name))
-    start, end = value.get("start"), value.get("end")
+def _span_from_evidence(value: Any, name: str) -> list[int]:
+    if isinstance(value, Mapping):
+        start, end = value.get("start"), value.get("end")
+    elif isinstance(value, list) and len(value) == 2:
+        start, end = value
+    else:
+        raise ValueError("{} must be a mapping or [start, end] list".format(name))
     if any(type(item) is not int for item in (start, end)) or start < 0 or end <= start:
         raise ValueError("{} must be a non-empty integer interval".format(name))
     return [start, end]
@@ -239,8 +242,8 @@ def promoted_anchor_from_bundle(bundle: Mapping[str, Any]) -> dict[str, Any]:
         "schema_version": 1,
         "target_full_prefix_tokens": target,
         "block_size": block_size,
-        "r0_span": _span_from_mapping(verdict.get("r0_span"), "r0_span"),
-        "r1_span": _span_from_mapping(verdict.get("r1_span"), "r1_span"),
+        "r0_span": _span_from_evidence(verdict.get("r0_span"), "r0_span"),
+        "r1_span": _span_from_evidence(verdict.get("r1_span"), "r1_span"),
         "lcp": verdict.get("lcp"),
         "eligible_prefix_sha256": _compact_ids_sha256(prompt_ids[:target]),
         "source_bundle_sha256": hashlib.sha256(_canonical_json_bytes(manifest)).hexdigest(),
