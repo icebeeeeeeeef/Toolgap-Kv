@@ -9,7 +9,7 @@ import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from toolgap_kv.a01 import Span
 from task0 import TASK0_BUNDLE_FILES, Task0Anchor, decide_task0, write_task0_bundle
@@ -211,6 +211,20 @@ class Task0RunnerContractTest(unittest.TestCase):
                 (module["VLLM_COMMIT"], "/root/vllm"),
             )
         self.assertEqual(run.call_args.args[0][:3], ["git", "-C", "/root/vllm"])
+
+    def test_local_model_snapshot_is_exact_and_offline_only(self):
+        module = self.load_runner()
+        with tempfile.TemporaryDirectory() as snapshot:
+            download = Mock(return_value=snapshot)
+            self.assertEqual(
+                module["_local_model_snapshot"](download),
+                str(Path(snapshot).resolve()),
+            )
+        download.assert_called_once_with(
+            repo_id=module["MODEL"],
+            revision=module["MODEL_REVISION"],
+            local_files_only=True,
+        )
 
     def test_cli_has_no_pressure_or_policy_surface(self):
         parse_args = self.load_runner()["parse_args"]

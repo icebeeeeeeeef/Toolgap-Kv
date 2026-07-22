@@ -164,6 +164,18 @@ def _require_vllm_version() -> str:
     return distribution_version
 
 
+def _local_model_snapshot(snapshot_download: Any) -> str:
+    """Resolve the pinned model before engine construction, without network I/O."""
+    snapshot = Path(snapshot_download(
+        repo_id=MODEL,
+        revision=MODEL_REVISION,
+        local_files_only=True,
+    )).resolve()
+    if not snapshot.is_dir():
+        raise RuntimeError("pinned model snapshot is not a directory: {}".format(snapshot))
+    return str(snapshot)
+
+
 def _gpu_provenance() -> Dict[str, Any]:
     import torch
 
@@ -283,6 +295,7 @@ def _base_manifest(
     input_hashes: Mapping[str, str],
     fixture_hash: str,
     tools_hash: str,
+    model_snapshot: str,
     vllm_distribution_version: str,
     vllm_commit: str,
     vllm_source_root: str,
@@ -306,7 +319,12 @@ def _base_manifest(
             "commit": vllm_commit,
             "source_root": vllm_source_root,
         },
-        "model": {"name": MODEL, "revision": MODEL_REVISION, "tokenizer_revision": MODEL_REVISION},
+        "model": {
+            "name": MODEL,
+            "revision": MODEL_REVISION,
+            "tokenizer_revision": MODEL_REVISION,
+            "local_snapshot": model_snapshot,
+        },
         "engine": {"prefix_caching": True, "chunked_prefill": False, "speculative_decoding": False, "connector": None},
         "gpu": dict(gpu),
         "span_adapter": {"version": SPAN_ADAPTER_VERSION, "a01_module_sha256": _sha256_bytes(Path(a01_module.__file__).read_bytes())},
@@ -367,14 +385,15 @@ def run_task0(ordinal: int, attempt: int, destination: Path) -> str:
     fixture, fixture_hash, tools_hash = _load_fixture()
 
     import vllm
+    from huggingface_hub import snapshot_download
     from vllm import LLM, SamplingParams
 
     vllm_distribution_version = _require_vllm_version()
     vllm_commit, vllm_source_root = _pinned_vllm_commit(vllm)
+    model_snapshot = _local_model_snapshot(snapshot_download)
     llm = LLM(
-        model=MODEL,
-        revision=MODEL_REVISION,
-        tokenizer_revision=MODEL_REVISION,
+        model=model_snapshot,
+        tokenizer=model_snapshot,
         tensor_parallel_size=1,
         enable_prefix_caching=True,
         enable_chunked_prefill=False,
@@ -408,6 +427,7 @@ def run_task0(ordinal: int, attempt: int, destination: Path) -> str:
         input_hashes=input_hashes,
         fixture_hash=fixture_hash,
         tools_hash=tools_hash,
+        model_snapshot=model_snapshot,
         vllm_distribution_version=vllm_distribution_version,
         vllm_commit=vllm_commit,
         vllm_source_root=vllm_source_root,
