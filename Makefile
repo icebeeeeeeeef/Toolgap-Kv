@@ -5,3 +5,4 @@ check: test
 
 test:
 	PYTHONPATH=src python3 -m unittest discover -s tests -v
+	PYTHONPATH=src python3 experiments/A0.1R-partial-block-residual/test_task0.py -v
