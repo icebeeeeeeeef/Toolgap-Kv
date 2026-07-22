@@ -226,6 +226,12 @@ class Task0RunnerContractTest(unittest.TestCase):
             local_files_only=True,
         )
 
+    def test_engine_keeps_request_cache_accounting_enabled(self):
+        kwargs = self.load_runner()["_engine_kwargs"]("/models/pinned")
+        self.assertEqual(kwargs["model"], "/models/pinned")
+        self.assertEqual(kwargs["tokenizer"], "/models/pinned")
+        self.assertFalse(kwargs["disable_log_stats"])
+
     def test_cli_has_no_pressure_or_policy_surface(self):
         parse_args = self.load_runner()["parse_args"]
         args = parse_args(["--ordinal", "1", "--attempt", "1"])

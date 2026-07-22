@@ -176,6 +176,20 @@ def _local_model_snapshot(snapshot_download: Any) -> str:
     return str(snapshot)
 
 
+def _engine_kwargs(model_snapshot: str) -> Dict[str, Any]:
+    return {
+        "model": model_snapshot,
+        "tokenizer": model_snapshot,
+        "tensor_parallel_size": 1,
+        "enable_prefix_caching": True,
+        "enable_chunked_prefill": False,
+        "spec_method": None,
+        "seed": 0,
+        # A0.1R consumes RequestOutput.num_cached_tokens as primary evidence.
+        "disable_log_stats": False,
+    }
+
+
 def _gpu_provenance() -> Dict[str, Any]:
     import torch
 
@@ -325,7 +339,13 @@ def _base_manifest(
             "tokenizer_revision": MODEL_REVISION,
             "local_snapshot": model_snapshot,
         },
-        "engine": {"prefix_caching": True, "chunked_prefill": False, "speculative_decoding": False, "connector": None},
+        "engine": {
+            "prefix_caching": True,
+            "chunked_prefill": False,
+            "speculative_decoding": False,
+            "connector": None,
+            "disable_log_stats": False,
+        },
         "gpu": dict(gpu),
         "span_adapter": {"version": SPAN_ADAPTER_VERSION, "a01_module_sha256": _sha256_bytes(Path(a01_module.__file__).read_bytes())},
     }
@@ -391,16 +411,7 @@ def run_task0(ordinal: int, attempt: int, destination: Path) -> str:
     vllm_distribution_version = _require_vllm_version()
     vllm_commit, vllm_source_root = _pinned_vllm_commit(vllm)
     model_snapshot = _local_model_snapshot(snapshot_download)
-    llm = LLM(
-        model=model_snapshot,
-        tokenizer=model_snapshot,
-        tensor_parallel_size=1,
-        enable_prefix_caching=True,
-        enable_chunked_prefill=False,
-        spec_method=None,
-        seed=0,
-        disable_log_stats=True,
-    )
+    llm = LLM(**_engine_kwargs(model_snapshot))
     config = llm.llm_engine.vllm_config
     if config.cache_config.enable_prefix_caching is not True:
         raise RuntimeError("engine did not preserve enable_prefix_caching=True")
