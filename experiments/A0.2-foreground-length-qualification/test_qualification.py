@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 from pathlib import Path
+import runpy
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 
 from toolgap_kv.a01 import Span
 
@@ -183,6 +186,100 @@ class LengthQualificationPromotionTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             promoted_anchor_from_bundle(_passing_bundle(status="fixture_qualification_stop"))
+
+
+class FixturePreparationTest(unittest.TestCase):
+    @staticmethod
+    def base_fixture() -> dict[str, object]:
+        return {
+            "initial_messages": [
+                {"role": "system", "content": "base system"},
+                {"role": "user", "content": "What is the weather?"},
+            ],
+            "tools": [{"type": "function", "function": {"name": "weather"}}],
+            "tool_result": {"city": "Hangzhou"},
+            "resume_prompt": "Answer using the tool result.",
+        }
+
+    @staticmethod
+    def one_token_per_record(messages, tools):
+        del tools
+        record_count = messages[0]["content"].count("record=")
+        return list(range(2027 + record_count))
+
+    @staticmethod
+    def equidistant_candidates(messages, tools):
+        del tools
+        record_count = messages[0]["content"].count("record=")
+        if record_count == 0:
+            return list(range(2034))
+        if record_count == 1:
+            return list(range(2036))
+        return list(range(2050))
+
+    def test_builder_selects_window_center_when_reachable(self):
+        from build_fixtures import build_fixture
+
+        fixture = build_fixture(
+            self.base_fixture(), 2048, render_ids=self.one_token_per_record
+        )
+
+        self.assertEqual(
+            fixture["qualification"]["accepted_r0_prompt_window"], [2027, 2042]
+        )
+        self.assertEqual(fixture["qualification"]["prepared_r0_prompt_tokens"], 2035)
+        self.assertEqual(fixture["qualification"]["archive_record_count"], 8)
+
+    def test_builder_breaks_equal_distance_tie_with_lower_record_count(self):
+        from build_fixtures import build_fixture
+
+        fixture = build_fixture(
+            self.base_fixture(), 2048, render_ids=self.equidistant_candidates
+        )
+
+        self.assertEqual(fixture["qualification"]["prepared_r0_prompt_tokens"], 2034)
+        self.assertEqual(fixture["qualification"]["archive_record_count"], 0)
+
+    def test_builder_preserves_user_tool_schema_and_tool_result(self):
+        from build_fixtures import build_fixture
+
+        base = self.base_fixture()
+        fixture = build_fixture(base, 2048, render_ids=self.one_token_per_record)
+
+        self.assertEqual(fixture["initial_messages"][-1], base["initial_messages"][-1])
+        self.assertEqual(fixture["tools"], base["tools"])
+        self.assertEqual(fixture["tool_result"], base["tool_result"])
+        self.assertEqual(base["initial_messages"][0]["content"], "base system")
+
+    def test_fixture_file_is_compact_json_and_refuses_overwrite(self):
+        from build_fixtures import write_fixture
+
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "foreground-2048.json"
+            write_fixture(destination, {"b": 1, "a": [2]})
+            self.assertEqual(destination.read_text(encoding="utf-8"), '{"a":[2],"b":1}\n')
+            with self.assertRaises(FileExistsError):
+                write_fixture(destination, {"a": 1})
+
+
+class FixturePreparationRunnerContractTest(unittest.TestCase):
+    def load_builder(self):
+        return runpy.run_path(
+            str(EXPERIMENT_DIR / "build_fixtures.py"),
+            run_name="a02_foreground_fixture_builder_test",
+        )
+
+    def test_import_does_not_require_transformers_or_vllm(self):
+        self.assertIn("main", self.load_builder())
+
+    def test_cli_accepts_only_registered_target_and_output(self):
+        parse_args = self.load_builder()["parse_args"]
+        args = parse_args(["--target", "2048", "--output", "fixtures/foreground-2048.json"])
+        self.assertEqual((args.target, args.output), (2048, "fixtures/foreground-2048.json"))
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parse_args(["--target", "17", "--output", "x.json"])
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parse_args(["--target", "2048", "--output", "x.json", "--padding", "override"])
 
 
 if __name__ == "__main__":
