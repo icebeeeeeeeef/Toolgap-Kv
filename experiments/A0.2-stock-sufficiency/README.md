@@ -13,7 +13,7 @@ connector 或 lifecycle runtime。
 3. connector/probe preflight：`VLLM_KV_CACHE_LAYOUT=HND PYTHONPATH=src python3 experiments/A0.2-stock-sufficiency/run_preflight.py --attempt 1`；
 4. 非比较预算 dry-run：`VLLM_KV_CACHE_LAYOUT=HND PYTHONPATH=src python3 experiments/A0.2-stock-sufficiency/run_budget.py --attempt 1`；
 5. 预算通过后，按 ordinal `1..90` 执行：`VLLM_KV_CACHE_LAYOUT=HND PYTHONPATH=src python3 experiments/A0.2-stock-sufficiency/run_matrix.py --ordinal N --attempt 1`；
-6. 只读 raw bundles 的结果聚合。
+6. 只读 raw bundles 的结果聚合：`PYTHONPATH=src python3 experiments/A0.2-stock-sufficiency/aggregate_results.py --attempt 1`。
 
 `raw/` 保存本机不可覆盖的 GPU evidence，并由仓库 `.gitignore` 排除；跟踪的结果报告只引用
 其路径与 SHA-256。任何 `invalid_configuration`、`accounting_contract_change` 或预注册的

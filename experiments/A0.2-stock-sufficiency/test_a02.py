@@ -625,5 +625,61 @@ class BudgetGateContractTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 parse_args(["--ordinal", "42"])
 
+
+class AggregationContractTest(unittest.TestCase):
+    @staticmethod
+    def _rows():
+        from a02 import registered_schedule
+
+        rows = []
+        for item in registered_schedule():
+            rows.append({
+                "ordinal": item.ordinal,
+                "length": item.length,
+                "band": item.band,
+                "pair": item.pair,
+                "policy": item.policy,
+                "status": "valid_observation",
+                "foreground_path": "gpu_local_hit",
+                "total_cached_tokens": item.length,
+                "external_cached_tokens": 0,
+                "connector_load_bytes": 0,
+                "service_seconds": 0.1,
+                "ttft_seconds": 0.11,
+                "probe_median_seconds": 0.2,
+            })
+        return rows
+
+    def test_all_stock_hits_trigger_registered_stop_condition_one(self):
+        from aggregate_results import decide_matrix
+
+        verdict = decide_matrix(self._rows(), transfer_overlap_observable=False)
+
+        self.assertEqual(verdict["status"], "stop_narrow")
+        self.assertIn("stop_1_no_s0_recovery_miss", verdict["triggered_conditions"])
+
+    def test_material_s0_miss_without_s1_restore_triggers_continue_one(self):
+        from aggregate_results import decide_matrix
+
+        rows = self._rows()
+        for row in rows:
+            if row["length"] == 2048 and row["band"] == "target":
+                row["foreground_path"] = "full_recompute"
+                row["total_cached_tokens"] = 0
+                row["service_seconds"] = 0.3
+                row["ttft_seconds"] = 0.31
+        verdict = decide_matrix(rows, transfer_overlap_observable=False)
+
+        self.assertEqual(verdict["status"], "continue_to_a1")
+        self.assertIn("continue_1_unrestored_material_miss", verdict["triggered_conditions"])
+
+    def test_missing_ordinal_is_inconclusive_not_selectively_ignored(self):
+        from aggregate_results import decide_matrix
+
+        verdict = decide_matrix(self._rows()[:-1], transfer_overlap_observable=False)
+
+        self.assertEqual(verdict["status"], "inconclusive")
+        self.assertIn("requires exactly the registered 90 runs", verdict["reason"])
+
 if __name__ == "__main__":
     unittest.main()
