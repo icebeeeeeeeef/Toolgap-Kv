@@ -11,12 +11,15 @@ connector 或 lifecycle runtime。
 1. CPU contracts：`PYTHONPATH=src python3 experiments/A0.2-stock-sufficiency/test_a02.py -v`
 2. HND calibration：`VLLM_KV_CACHE_LAYOUT=HND PYTHONPATH=src python3 experiments/A0.2-stock-sufficiency/run_calibration.py --attempt 1`
 3. connector/probe preflight：`VLLM_KV_CACHE_LAYOUT=HND PYTHONPATH=src python3 experiments/A0.2-stock-sufficiency/run_preflight.py --attempt 1`；
-4. 只消费已关闭 gate artifact 的 90-run comparative matrix；
-5. 只读 raw bundles 的结果聚合。
+4. 非比较预算 dry-run：`VLLM_KV_CACHE_LAYOUT=HND PYTHONPATH=src python3 experiments/A0.2-stock-sufficiency/run_budget.py --attempt 1`；
+5. 预算通过后，按 ordinal `1..90` 执行：`VLLM_KV_CACHE_LAYOUT=HND PYTHONPATH=src python3 experiments/A0.2-stock-sufficiency/run_matrix.py --ordinal N --attempt 1`；
+6. 只读 raw bundles 的结果聚合。
 
 `raw/` 保存本机不可覆盖的 GPU evidence，并由仓库 `.gitignore` 排除；跟踪的结果报告只引用
 其路径与 SHA-256。任何 `invalid_configuration`、`accounting_contract_change` 或预注册的
 preflight 失败都会保留 artifact 并停止后续 gate，不会通过改参数或补有利 run 绕过。
+预算 dry-run 固定消费 schedule ordinal 42（`L=8192, M=1.10, S0`），只估算成本，不计入
+90-run comparative matrix；保守预测超过 12 GPU-hours 时不得启动 matrix。
 
 ## 当前已冻结契约
 

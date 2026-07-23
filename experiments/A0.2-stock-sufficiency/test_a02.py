@@ -506,5 +506,89 @@ class PreflightRunnerContractTest(unittest.TestCase):
         self.assertEqual(s1["kv_offloading_size"], 5)
         self.assertEqual(s1["kv_offloading_backend"], "native")
 
+
+class MatrixRunnerContractTest(unittest.TestCase):
+    def test_import_does_not_require_vllm(self):
+        namespace = runpy.run_path(
+            str(Path(__file__).with_name("run_matrix.py")),
+            run_name="a02_matrix_import",
+        )
+
+        self.assertIn("run_matrix", namespace)
+
+    def test_public_cli_exposes_only_registered_ordinal_and_attempt(self):
+        from run_matrix import parse_args
+
+        args = parse_args(["--ordinal", "41", "--attempt", "2"])
+        self.assertEqual((args.ordinal, args.attempt), (41, 2))
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parse_args(["--ordinal", "1", "--length", "2048"])
+
+    def test_destination_encodes_schedule_identity_and_attempt(self):
+        from a02 import registered_schedule
+        from run_matrix import destination_for
+
+        item = registered_schedule()[40]
+        self.assertEqual(item.ordinal, 41)
+        self.assertEqual(
+            destination_for(Path("raw"), item, 2),
+            Path(
+                "raw/matrix/L8192/target/pair-01/"
+                f"ordinal-041-{item.policy}-a02"
+            ),
+        )
+
+    def test_registered_item_lookup_refuses_out_of_range(self):
+        from run_matrix import schedule_item
+
+        self.assertEqual(schedule_item(1).ordinal, 1)
+        self.assertEqual(schedule_item(90).ordinal, 90)
+        for ordinal in (0, 91):
+            with self.assertRaises(ValueError):
+                schedule_item(ordinal)
+
+    def test_timing_uses_engine_monotonic_events(self):
+        from run_matrix import request_timing
+
+        class Metrics:
+            queued_ts = 10.0
+            scheduled_ts = 10.2
+            first_token_ts = 10.7
+            last_token_ts = 11.0
+
+        timing = request_timing(Metrics())
+
+        self.assertAlmostEqual(timing["queue_delay_seconds"], 0.2)
+        self.assertAlmostEqual(timing["prefill_seconds"], 0.5)
+        self.assertAlmostEqual(timing["ttft_seconds"], 0.7)
+        self.assertAlmostEqual(timing["service_seconds"], 0.5)
+
+
+class BudgetGateContractTest(unittest.TestCase):
+    def test_budget_estimate_is_conservative_and_capped_at_twelve_gpu_hours(self):
+        from a02 import decide_budget
+
+        valid = decide_budget(representative_run_seconds=100.0)
+        over = decide_budget(representative_run_seconds=400.0)
+
+        self.assertEqual(valid.status, "valid")
+        self.assertAlmostEqual(valid.predicted_gpu_hours, 3.125)
+        self.assertEqual(over.status, "budget_review_stop")
+        self.assertAlmostEqual(over.predicted_gpu_hours, 12.5)
+
+    def test_budget_runner_is_non_comparative_and_has_no_matrix_knobs(self):
+        namespace = runpy.run_path(
+            str(Path(__file__).with_name("run_budget.py")),
+            run_name="a02_budget_import",
+        )
+        parse_args = namespace["parse_args"]
+
+        self.assertEqual(parse_args(["--attempt", "1"]).attempt, 1)
+        self.assertEqual(namespace["REPRESENTATIVE_ORDINAL"], 42)
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parse_args(["--ordinal", "42"])
+
 if __name__ == "__main__":
     unittest.main()

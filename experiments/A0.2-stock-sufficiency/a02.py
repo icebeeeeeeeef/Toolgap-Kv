@@ -80,6 +80,13 @@ class ConnectorPreflightVerdict:
     transfer_overlap_observable: bool
 
 
+@dataclass(frozen=True)
+class BudgetVerdict:
+    status: str
+    reason: str
+    predicted_gpu_hours: float
+
+
 def _pair_order(length: int, band: str, pair: int) -> tuple[str, str]:
     material = f"{SCHEDULE_SEED}:{length}:{band}:{pair}".encode("utf-8")
     return ("S0", "S1") if hashlib.sha256(material).digest()[0] % 2 == 0 else ("S1", "S0")
@@ -361,6 +368,34 @@ def decide_connector_preflight(
     if type(external_cached_tokens) is not int or external_cached_tokens <= 0 or connector_load_bytes <= 0:
         return ConnectorPreflightVerdict("connector_observability_stop", "controlled load did not expose external cached tokens plus load bytes", False)
     return ConnectorPreflightVerdict("valid", "native connector configuration and controlled load are observable", False)
+
+
+def decide_budget(
+    *,
+    representative_run_seconds: float,
+    comparative_runs: int = 90,
+    conservative_multiplier: float = 1.25,
+    cap_gpu_hours: float = 12.0,
+) -> BudgetVerdict:
+    values = (representative_run_seconds, conservative_multiplier, cap_gpu_hours)
+    if (
+        any(not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0 for value in values)
+        or type(comparative_runs) is not int
+        or comparative_runs <= 0
+    ):
+        raise ValueError("budget inputs must be positive numeric values")
+    predicted = float(representative_run_seconds) * comparative_runs * float(conservative_multiplier) / 3600
+    if predicted > cap_gpu_hours:
+        return BudgetVerdict(
+            "budget_review_stop",
+            "conservative 90-run prediction exceeds the registered GPU-hour cap",
+            predicted,
+        )
+    return BudgetVerdict(
+        "valid",
+        "conservative 90-run prediction is within the registered GPU-hour cap",
+        predicted,
+    )
 
 
 def build_calibration(
