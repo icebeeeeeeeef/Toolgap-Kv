@@ -507,13 +507,22 @@ class PreflightRunnerContractTest(unittest.TestCase):
     def test_s1_diff_is_only_native_offloading_configuration(self):
         from run_preflight import policy_engine_kwargs
 
-        s0 = policy_engine_kwargs("/model", "S0", 5)
-        s1 = policy_engine_kwargs("/model", "S1", 5)
+        s0 = policy_engine_kwargs("/model", "S0", 5, 3151)
+        s1 = policy_engine_kwargs("/model", "S1", 5, 3151)
         difference = {key for key in set(s0) | set(s1) if s0.get(key) != s1.get(key)}
 
         self.assertEqual(difference, {"kv_offloading_size", "kv_offloading_backend"})
+        self.assertEqual(s0["num_gpu_blocks_override"], 3151)
+        self.assertEqual(s1["num_gpu_blocks_override"], 3151)
         self.assertEqual(s1["kv_offloading_size"], 5)
         self.assertEqual(s1["kv_offloading_backend"], "native")
+
+    def test_fresh_worker_rejects_capacity_drift_from_calibration(self):
+        from run_preflight import require_gpu_capacity
+
+        self.assertEqual(require_gpu_capacity(3151, 3151), 3151)
+        with self.assertRaisesRegex(RuntimeError, "3157.*3151"):
+            require_gpu_capacity(3157, 3151)
 
 
 class MatrixRunnerContractTest(unittest.TestCase):

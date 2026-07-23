@@ -64,8 +64,18 @@ def destination_for(raw_root: Path, attempt: int) -> Path:
     return raw_root / "preflight" / f"preflight-a{attempt:02d}"
 
 
-def policy_engine_kwargs(model_snapshot: str, policy: str, offloading_size_gib: int) -> dict[str, Any]:
-    kwargs = engine_kwargs(model_snapshot)
+def policy_engine_kwargs(
+    model_snapshot: str,
+    policy: str,
+    offloading_size_gib: int,
+    gpu_capacity_blocks: int,
+) -> dict[str, Any]:
+    if type(gpu_capacity_blocks) is not int or gpu_capacity_blocks <= 0:
+        raise ValueError("gpu_capacity_blocks must be a positive integer")
+    kwargs = {
+        **engine_kwargs(model_snapshot),
+        "num_gpu_blocks_override": gpu_capacity_blocks,
+    }
     if policy == "S0":
         return kwargs
     if policy != "S1" or type(offloading_size_gib) is not int or offloading_size_gib <= 0:
@@ -75,6 +85,14 @@ def policy_engine_kwargs(model_snapshot: str, policy: str, offloading_size_gib: 
         "kv_offloading_size": offloading_size_gib,
         "kv_offloading_backend": "native",
     }
+
+
+def require_gpu_capacity(actual: int, expected: int) -> int:
+    if type(actual) is not int or type(expected) is not int or actual != expected:
+        raise RuntimeError(
+            f"resolved GPU KV capacity {actual!r} differs from calibrated {expected!r}"
+        )
+    return actual
 
 
 def _load_module(path: Path, name: str) -> Any:
@@ -160,9 +178,18 @@ def _worker_engine(policy: str, calibration: Mapping[str, Any]) -> tuple[Any, Ev
             model_snapshot,
             policy,
             int(calibration["s1_kv_offloading_size_gib"]),
+            int(calibration["gpu_capacity_blocks"]),
         )
     )
     engine = AsyncLLM.from_engine_args(args, stat_loggers=[stat_logger_factory(recorder)])
+    try:
+        require_gpu_capacity(
+            int(engine.vllm_config.cache_config.num_gpu_blocks or 0),
+            int(calibration["gpu_capacity_blocks"]),
+        )
+    except Exception:
+        engine.shutdown()
+        raise
     return engine, recorder, a01r, model_snapshot
 
 
