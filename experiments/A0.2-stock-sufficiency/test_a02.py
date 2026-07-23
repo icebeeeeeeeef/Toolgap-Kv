@@ -673,6 +673,42 @@ class AggregationContractTest(unittest.TestCase):
         self.assertEqual(verdict["status"], "continue_to_a1")
         self.assertIn("continue_1_unrestored_material_miss", verdict["triggered_conditions"])
 
+    def test_reproducible_full_miss_below_theta_triggers_stop_two(self):
+        from aggregate_results import decide_matrix
+
+        rows = self._rows()
+        for row in rows:
+            if row["length"] == 2048 and row["band"] == "target" and row["policy"] == "S0":
+                row["foreground_path"] = "full_recompute"
+                row["total_cached_tokens"] = 0
+                row["service_seconds"] = 0.102
+        verdict = decide_matrix(rows, transfer_overlap_observable=False)
+
+        self.assertEqual(verdict["status"], "stop_narrow")
+        self.assertIn("stop_2_no_material_service_headroom", verdict["triggered_conditions"])
+
+    def test_two_material_cells_with_opposite_resume_directions_continue_three(self):
+        from aggregate_results import decide_matrix
+
+        rows = self._rows()
+        for row in rows:
+            if row["band"] != "target" or row["length"] not in (2048, 8192):
+                continue
+            if row["policy"] == "S0":
+                row["foreground_path"] = "full_recompute"
+                row["total_cached_tokens"] = 0
+                row["service_seconds"] = 0.3
+                row["ttft_seconds"] = 0.2 if row["length"] == 2048 else 0.3
+            else:
+                row["foreground_path"] = "cpu_restore"
+                row["external_cached_tokens"] = row["length"]
+                row["connector_load_bytes"] = row["length"] * 1024
+                row["ttft_seconds"] = 0.3 if row["length"] == 2048 else 0.2
+        verdict = decide_matrix(rows, transfer_overlap_observable=False)
+
+        self.assertEqual(verdict["status"], "continue_to_a1")
+        self.assertIn("continue_3_foreground_direction_reversal", verdict["triggered_conditions"])
+
     def test_missing_ordinal_is_inconclusive_not_selectively_ignored(self):
         from aggregate_results import decide_matrix
 
