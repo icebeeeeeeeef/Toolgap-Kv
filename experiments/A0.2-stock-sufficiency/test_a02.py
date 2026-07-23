@@ -517,6 +517,32 @@ class PreflightRunnerContractTest(unittest.TestCase):
 
 
 class MatrixRunnerContractTest(unittest.TestCase):
+    def test_canonical_messages_explicitly_match_qualification_chat_normalization(self):
+        from run_matrix import normalize_canonical_messages
+
+        messages = [{
+            "role": "assistant",
+            "tool_calls": [{
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"city":"Hangzhou"}',
+                },
+            }],
+        }]
+        normalized = normalize_canonical_messages(
+            messages,
+            {"name": "get_weather", "arguments": {"city": "Hangzhou"}},
+        )
+
+        self.assertEqual(
+            normalized[0]["tool_calls"][0]["function"]["arguments"],
+            {"city": "Hangzhou"},
+        )
+        self.assertIsInstance(
+            messages[0]["tool_calls"][0]["function"]["arguments"], str
+        )
+
     def test_import_does_not_require_vllm(self):
         namespace = runpy.run_path(
             str(Path(__file__).with_name("run_matrix.py")),

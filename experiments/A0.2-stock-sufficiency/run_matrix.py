@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from copy import deepcopy
 from dataclasses import asdict
 import hashlib
 import importlib.metadata as importlib_metadata
@@ -200,6 +201,41 @@ def _output_record(output: Any, trace: RequestTrace) -> dict[str, Any]:
     }
 
 
+def normalize_canonical_messages(
+    messages: Sequence[Mapping[str, Any]],
+    expected_tool: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Make the qualification path's in-place chat normalization explicit."""
+    normalized = deepcopy(list(messages))
+    assistants = [
+        message
+        for message in normalized
+        if isinstance(message, Mapping)
+        and message.get("role") == "assistant"
+        and "tool_calls" in message
+    ]
+    if len(assistants) != 1:
+        raise ValueError("canonical history must contain exactly one assistant tool call")
+    calls = assistants[0].get("tool_calls")
+    if not isinstance(calls, list) or len(calls) != 1:
+        raise ValueError("canonical history must contain exactly one assistant tool call")
+    function = calls[0].get("function") if isinstance(calls[0], Mapping) else None
+    if not isinstance(function, dict):
+        raise ValueError("canonical assistant tool call has no function mapping")
+    if function.get("name") != expected_tool.get("name"):
+        raise ValueError("canonical assistant tool name differs from parsed R0")
+    arguments = function.get("arguments")
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except json.JSONDecodeError as error:
+            raise ValueError("canonical assistant arguments are not JSON") from error
+    if arguments != expected_tool.get("arguments"):
+        raise ValueError("canonical assistant arguments differ from parsed R0")
+    function["arguments"] = arguments
+    return normalized
+
+
 def _canonical_r1(
     *,
     a01r: Any,
@@ -213,6 +249,7 @@ def _canonical_r1(
     messages, parser, r0_tool, tool_call_id = qualification._canonical_r1_messages(
         a01r, fixture, tokenizer, r0
     )
+    messages = normalize_canonical_messages(messages, r0_tool)
     prompt_ids = a01r._render_ids(tokenizer, messages, fixture["tools"])
     rendered = a01r._render_text(tokenizer, messages, fixture["tools"])
     initial_rendered = tokenizer.apply_chat_template(
