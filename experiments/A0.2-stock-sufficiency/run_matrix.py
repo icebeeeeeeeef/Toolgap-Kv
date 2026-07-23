@@ -310,6 +310,7 @@ async def _execute(
             prompt_token_ids=r0_prompt_ids,
             request_id=f"a02-o{item.ordinal:03d}-r0",
             max_tokens=256,
+            ignore_eos=False,
         )
         r0 = _output_record(r0_output, r0_trace)
         r0["r0_ids"] = r0["prompt_token_ids"] + r0["completion_token_ids"]

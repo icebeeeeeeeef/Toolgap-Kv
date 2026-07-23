@@ -378,6 +378,15 @@ class CalibrationRunnerContractTest(unittest.TestCase):
 
 
 class RuntimeObservationContractTest(unittest.TestCase):
+    def test_foreground_r0_honors_eos_while_pressure_requests_can_ignore_it(self):
+        import inspect
+        from runtime import collect_request
+
+        parameter = inspect.signature(collect_request).parameters["ignore_eos"]
+        self.assertIs(parameter.default, True)
+        source = Path(__file__).with_name("run_matrix.py").read_text(encoding="utf-8")
+        self.assertIn("max_tokens=256,\n            ignore_eos=False,", source)
+
     def test_prompt_source_records_sum_without_losing_local_external_split(self):
         from runtime import summarize_prompt_sources
 

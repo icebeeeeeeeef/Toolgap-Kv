@@ -123,6 +123,7 @@ async def collect_request(
     request_id: str,
     max_tokens: int,
     trace: RequestTrace | None = None,
+    ignore_eos: bool = True,
 ) -> tuple[Any, RequestTrace]:
     """Collect one AsyncLLM request while retaining first/finish liveness."""
     from vllm import SamplingParams
@@ -133,7 +134,7 @@ async def collect_request(
     final_output = None
     async for output in engine.generate(
         {"prompt_token_ids": list(prompt_token_ids)},
-        SamplingParams(temperature=0, max_tokens=max_tokens, ignore_eos=True),
+        SamplingParams(temperature=0, max_tokens=max_tokens, ignore_eos=ignore_eos),
         request_id=request_id,
     ):
         if trace.first_token_monotonic is None:
