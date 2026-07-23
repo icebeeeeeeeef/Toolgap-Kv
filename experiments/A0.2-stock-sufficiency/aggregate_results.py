@@ -333,7 +333,8 @@ def load_rows(raw_root: Path, attempt: int) -> tuple[list[dict[str, Any]], dict[
         timing = _load_json(bundle / "timing.json")
         probe = _load_json(bundle / "probe.json")
         connector = _load_json(bundle / "connector.json")
-        if manifest.get("schedule_item") != asdict(item):
+        expected_item = json.loads(json.dumps(asdict(item)))
+        if manifest.get("schedule_item") != expected_item:
             raise ValueError(f"ordinal {item.ordinal} manifest schedule identity drifted")
         if manifest.get("schedule_sha256") != schedule_sha256(registered_schedule()):
             raise ValueError(f"ordinal {item.ordinal} schedule hash drifted")
