@@ -647,6 +647,7 @@ class AggregationContractTest(unittest.TestCase):
                 "service_seconds": 0.1,
                 "ttft_seconds": 0.11,
                 "probe_median_seconds": 0.2,
+                "r1_completion_token_ids": [15364],
             })
         return rows
 

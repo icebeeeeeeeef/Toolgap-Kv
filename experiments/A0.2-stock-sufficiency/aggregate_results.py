@@ -122,6 +122,19 @@ def decide_matrix(
                 }
 
     ordered = [by_ordinal[item.ordinal] for item in schedule]
+    for length in (2048, 8192, 16384):
+        outputs = {
+            tuple(row.get("r1_completion_token_ids", ()))
+            for row in ordered
+            if row["length"] == length
+        }
+        if len(outputs) != 1 or not next(iter(outputs)):
+            return {
+                "status": "inconclusive",
+                "reason": f"L={length} greedy R1 output oracle is missing or inconsistent",
+                "triggered_conditions": [],
+                "cells": [],
+            }
     pairs = _pair_map(ordered)
     low_baselines: dict[int, dict[str, float]] = {}
     for length in (2048, 8192, 16384):
@@ -333,6 +346,7 @@ def load_rows(raw_root: Path, attempt: int) -> tuple[list[dict[str, Any]], dict[
         timing = _load_json(bundle / "timing.json")
         probe = _load_json(bundle / "probe.json")
         connector = _load_json(bundle / "connector.json")
+        foreground = _load_json(bundle / "foreground.json")
         expected_item = json.loads(json.dumps(asdict(item)))
         if manifest.get("schedule_item") != expected_item:
             raise ValueError(f"ordinal {item.ordinal} manifest schedule identity drifted")
@@ -347,6 +361,13 @@ def load_rows(raw_root: Path, attempt: int) -> tuple[list[dict[str, Any]], dict[
             raise ValueError(f"ordinal {item.ordinal} connector evidence is malformed")
         if connector.get("transfer_overlap_observable") is not False:
             raise ValueError(f"ordinal {item.ordinal} transfer-overlap contract drifted")
+        r1 = foreground.get("r1")
+        if (
+            foreground.get("parser_structures_equal") is not True
+            or not isinstance(r1, Mapping)
+            or not isinstance(r1.get("completion_token_ids"), list)
+        ):
+            raise ValueError(f"ordinal {item.ordinal} foreground output oracle is malformed")
         normalized_probe_times = [_number(value, "probe timing") for value in probe_times]
         rows.append({
             "ordinal": item.ordinal,
@@ -363,6 +384,7 @@ def load_rows(raw_root: Path, attempt: int) -> tuple[list[dict[str, Any]], dict[
             "ttft_seconds": r1_timing.get("ttft_seconds"),
             "probe_median_seconds": float(median(normalized_probe_times)),
             "probe_samples_seconds": normalized_probe_times,
+            "r1_completion_token_ids": list(r1["completion_token_ids"]),
         })
         hashes[str(item.ordinal)] = {
             name: hashlib.sha256((bundle / name).read_bytes()).hexdigest()
