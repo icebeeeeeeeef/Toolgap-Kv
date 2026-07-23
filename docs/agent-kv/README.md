@@ -11,9 +11,10 @@
 > stock-APC admission result for its eligible 192-token prefix. The separate
 > foreground-length qualification has experimentally validated and committed
 > three A0.2 foreground input anchors (`L=2048/8192/16384`) under the supported
-> chunked-prefill/HND pin. A0.2 itself remains `roadmap`: no capacity-pressure
-> matrix, APC/CPU-offload comparison, measured resume metric, performance claim,
-> or lifecycle runtime exists.
+> chunked-prefill/HND pin. A0.2 has now completed a valid 90-run capacity-pressure
+> matrix and is `experimentally validated` with an `inconclusive` gate decision:
+> none of its preregistered Stop/Continue conditions fired. This does not authorize
+> A1, a performance claim, or a lifecycle runtime; those remain `roadmap`.
 
 ## One-Sentence Definition
 
@@ -43,19 +44,21 @@ success condition.
    the first executable evidence protocol.
 6. [../../experiments/A0.1R-partial-block-residual/A0.1R-results-2026-07-22.md](../../experiments/A0.1R-partial-block-residual/A0.1R-results-2026-07-22.md):
    the real-GPU stock-APC admission result and its strict boundary.
-7. [ARCHITECTURE.md](ARCHITECTURE.md): proposed components, lifecycle contracts,
+7. [../../experiments/A0.2-stock-sufficiency/A0.2-stock-sufficiency-results-2026-07-23.md](../../experiments/A0.2-stock-sufficiency/A0.2-stock-sufficiency-results-2026-07-23.md):
+   the 90-run stock APC/native offload capacity-pressure result and D028 boundary.
+8. [ARCHITECTURE.md](ARCHITECTURE.md): proposed components, lifecycle contracts,
    decision path, and failure semantics.
-8. [EVALUATION.md](EVALUATION.md): hypotheses, baselines, workloads, metrics,
+9. [EVALUATION.md](EVALUATION.md): hypotheses, baselines, workloads, metrics,
    bounds, negative cases, and evidence rules.
-9. [INTERVIEW_MAP.md](INTERVIEW_MAP.md): decision-card registry, organic hooks,
+10. [INTERVIEW_MAP.md](INTERVIEW_MAP.md): decision-card registry, organic hooks,
    claim trees, and evidence gates.
-10. [NARRATIVE.md](NARRATIVE.md): candidate story, ownership boundary, interview
+11. [NARRATIVE.md](NARRATIVE.md): candidate story, ownership boundary, interview
    framing, and resume templates.
-11. [interview-grill/README.md](interview-grill/README.md): adversarial TL
+12. [interview-grill/README.md](interview-grill/README.md): adversarial TL
    questions, evidence-gated answers, and mock-interview maintenance workflow.
-12. [RELATED_WORK.md](RELATED_WORK.md): direct predecessors, adjacent systems,
+13. [RELATED_WORK.md](RELATED_WORK.md): direct predecessors, adjacent systems,
    vLLM status, and fidelity rules.
-13. [DECISIONS.md](DECISIONS.md): accepted, deferred, rejected, and superseded decisions.
+14. [DECISIONS.md](DECISIONS.md): accepted, deferred, rejected, and superseded decisions.
 
 ## Current Snapshot
 
@@ -64,13 +67,13 @@ success condition.
 | Core problem | Defined |
 | Engine-independent contracts | `shipped`: events/actions/DecisionTrace scaffolding and tests |
 | Runtime architecture | `roadmap`: proposed only |
-| vLLM target commit | A0.1/A0.1R: `752a3a504485790a2e8491cacbb35c137339ad34` (`vLLM 0.25.1`) |
-| Hardware | A0.1/A0.1R: NVIDIA A10; driver `580.126.09`; Torch CUDA `13.0` |
+| vLLM target commit | A0.1/A0.1R/A0.2: `752a3a504485790a2e8491cacbb35c137339ad34` (`vLLM 0.25.1`) |
+| Hardware | A0.1/A0.1R/A0.2: NVIDIA A10; driver `580.126.09`; Torch CUDA `13.0` |
 | Workload | Candidate sources identified; no replay built |
-| Runtime code | `shipped`: engine-independent Phase 0 plus A0.1/A0.1R measurement harnesses; no candidate-owned lifecycle runtime |
-| Benchmark data | `experimentally validated`: negative A0.1 full-span coverage artifact and three-ordinal A0.1R stock-APC admission artifact; raw bundles are locally retained and their hashes/commands are tracked in [A0.1 results](../../experiments/0001-mechanism-feasibility/A0.1-results-2026-07-22.md) and [A0.1R results](../../experiments/A0.1R-partial-block-residual/A0.1R-results-2026-07-22.md) |
+| Runtime code | `shipped`: engine-independent Phase 0 plus A0.1/A0.1R/A0.2 measurement harnesses; no candidate-owned lifecycle runtime |
+| Benchmark data | `experimentally validated`: negative A0.1 full-span coverage, positive A0.1R stock-APC admission, and a valid 90-run A0.2 stock-sufficiency matrix whose gate decision is `inconclusive`; raw bundles are locally retained and hashes/commands are tracked in the [A0.1](../../experiments/0001-mechanism-feasibility/A0.1-results-2026-07-22.md), [A0.1R](../../experiments/A0.1R-partial-block-residual/A0.1R-results-2026-07-22.md), and [A0.2](../../experiments/A0.2-stock-sufficiency/A0.2-stock-sufficiency-results-2026-07-23.md) reports |
 | Simulator data | None |
-| Resume claim | No positive runtime or performance bullet allowed; only the narrow A0.1/A0.1R applicability findings may be discussed with their testbed boundaries |
+| Resume claim | No positive runtime or performance bullet allowed; A0.2 may be discussed only as a rigorously preserved `inconclusive` stock-baseline experiment with its fixed-testbed boundary |
 
 ## Core Glossary
 
@@ -147,10 +150,11 @@ Those items require independent project review even after CT1-CT3 succeed.
 
 ## Immediate Next Decision
 
-Execute Gate A in [ROADMAP.md](ROADMAP.md). First complete the capability matrix;
-then prove a viable controller seam with one candidate-owned lifecycle transition,
-obtain a pinned-vLLM requested-to-observed nominal raw trace, add one
-source-audited fault/fallback fixture, and close the first decision card. A
-trace-only observer cannot pass the ownership gate. A performance/applicability
-negative case is useful but cannot replace the safety fixture. Gate A's purpose
-is not to prove a speedup.
+Apply D028 before any further implementation. The valid A0.2 matrix did not
+satisfy a registered Stop or Continue condition, so it does not authorize A1.
+The next decision card must either stop/narrow/reselect the recruiting mainline
+under D018/D024, or preregister one new falsifiable question around a maintainable
+request-scoped transfer seam, partial-miss boundary, or another non-duplicative
+candidate-owned lifecycle contract. It may not add selective A0.2 runs or
+retroactively redefine material cells. A trace-only observer still cannot pass
+the ownership gate.

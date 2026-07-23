@@ -2,11 +2,13 @@
 
 > Project claim state: `roadmap`
 >
-> Last reviewed: 2026-07-22
+> Last reviewed: 2026-07-23
 >
-> No lifecycle-runtime tree in this file is `evidence-backed`. DC0 is closed as
-> a narrow, negative applicability card; it supports an honest stop-boundary
-> explanation, not a completed runtime or performance claim.
+> No lifecycle-runtime tree in this file is `evidence-backed`. DC0 preserves the
+> original negative A0.1 applicability result, whose branch decision was later
+> superseded by D027. DC0.2 closes the stock-sufficiency question as a valid
+> `inconclusive` experiment under D028. Neither card supports a completed runtime
+> or performance claim.
 
 ## 1. Purpose
 
@@ -59,12 +61,13 @@ Source reading alone may reject an architecture but cannot satisfy a card's
 measurement requirement unless the decision is specifically a conformance contract
 and is exercised by a real trace or test.
 
-DC0 below is closed. All controller, correctness, and performance cards remain
-`roadmap` and must not borrow DC0's evidence.
+DC0 and DC0.2 below are closed evidence cards. All controller, correctness, and
+performance cards remain `roadmap` and must not borrow their evidence.
 
 ### DC0: Canonical Tool-Call Full-Block Applicability
 
-State: `evidence-backed` (negative); closed; does not support CT1.
+State: `evidence-backed` (negative, historical branch decision superseded);
+closed; does not support CT1.
 
 ```text
 Decision:
@@ -99,8 +102,10 @@ Observed real evidence:
   semantic_span_equal=true at [178,198), LCP=199, block_size=16, and
   reusable_full_block_ceiling=192. The semantic end is not covered (slack=-6).
 Decision:
-  serialization_stop. Do not run A0.2, ToolGapController, custom offload, or
-  forced-path work from this fixture/pin.
+  the preregistered A0.1 verdict was serialization_stop and D026 originally
+  blocked A0.2. D027 later superseded that branch decision only after A0.1R
+  independently observed stock APC admitting the eligible 192-token prefix.
+  The A0.1 raw verdict itself remains unchanged.
 Losing/applicability boundary:
   semantic equality alone is insufficient when APC full-block geometry ends
   before the assistant semantic span. This does not claim an APC miss, CPU
@@ -109,6 +114,59 @@ Organic hooks:
   prompt canonicalization, template/parser boundaries, prefix-cache block
   granularity, evidence-gated stop conditions, and why a negative result can
   prevent an invalid systems implementation.
+```
+
+### DC0.2: Stock APC / Native-Offload Sufficiency
+
+State: `evidence-backed` (`inconclusive`); closed; does not support CT1.
+
+```text
+Decision:
+  whether the preregistered stock APC (S0) versus stock APC plus native CPU
+  offload (S1) matrix leaves a candidate-addressable gap that authorizes A1.
+Alternatives:
+  Stop/narrow because one stock static path covers the declared cells;
+  Continue to A1 because a registered unrestored miss, directional trade-off,
+  or foreground-direction reversal exists; retain valid evidence as
+  inconclusive when neither branch is satisfied.
+Preregistered falsifiable expectation:
+  exactly 3 lengths × 3 M bands × 5 pairs × 2 policies; materiality requires an
+  S0 full-recompute miss with Δservice > θ and token-accounting agreement;
+  request-scoped transfer overlap is mandatory for the directional-trade-off
+  branch; no selective extra runs or post-hoc material redefinition.
+Measurement and attribution:
+  HND layout in both arms, supported chunked prefill, 3151 explicitly frozen
+  GPU KV blocks, 5 GiB S1 CPU tier, per-request local/external cached-token
+  accounting, active-probe timing, and independent engine execution per run.
+Artifacts:
+  experiments/A0.2-stock-sufficiency/
+    A0.2-stock-sufficiency-results-2026-07-23.md;
+  experiments/A0.2-stock-sufficiency/results/attempt-02/
+    a02-matrix-summary.json;
+  local ignored raw/matrix/**/ordinal-*-a02/ bundles with all 630 JSON hashes
+  recorded in the machine summary.
+Reproduction:
+  PYTHONPATH=experiments/A0.2-stock-sufficiency:src
+  python3 experiments/A0.2-stock-sufficiency/aggregate_results.py --attempt 2
+  in a clean results directory or evidence copy.
+Observed real evidence:
+  90/90 valid observations. Six pressure cells had S0 missing prefixes; three
+  were material full-recompute cells. S1 restored all 15 material pairs.
+  Material foreground direction was S1-faster in all three cells, so there was
+  no reversal. transfer_overlap_observable=false was frozen before execution,
+  disabling Stop 3 and Continue 2. No other Stop or Continue condition fired.
+Decision:
+  D028 closes A0.2 as experimentally validated inconclusive. Do not enter A1,
+  implement the lifecycle runtime, redefine partial misses as material, or
+  claim ToolGap performance from this evidence.
+Losing/applicability boundary:
+  capacity-pressure synthetic workload, one Qwen/vLLM/A10/HND testbed, no
+  request-scoped transfer interval, no real wall-clock tool-gap load, no
+  lifecycle identity/epoch/fallback/cancel behavior.
+Organic hooks:
+  why valid evidence can remain inconclusive; full versus partial prefix miss;
+  APC/offload accounting; HND fairness; transfer observability; preregistration
+  discipline; preserving provenance-invalid Attempt 1.
 ```
 
 ### DC1: Smallest Current-vLLM Integration Seam

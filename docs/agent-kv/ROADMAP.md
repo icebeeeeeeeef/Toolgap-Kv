@@ -103,10 +103,36 @@ tool-call semantic span was equal in R0/R1. However, the observed block size was
 scope limits are in
 [A0.1 results](../../experiments/0001-mechanism-feasibility/A0.1-results-2026-07-22.md).
 
-Consequently the A0.2 stock-sufficiency matrix and all Week 2 controller work are
-blocked. This is a narrowly measured canonical full-block applicability result,
-not an APC/offload/performance result. A future continuation must open a new
-reviewed ticket rather than modifying the fixture to manufacture alignment.
+This originally blocked A0.2 under D026. The result remains a narrowly measured
+canonical full-block applicability result, not an APC/offload/performance result,
+and the fixture was not padded. D027 later superseded that branch decision after
+A0.1R directly observed stock APC materializing the eligible 192-token prefix.
+The historical A0.1 verdict and raw evidence remain unchanged.
+
+### 2026-07-23 Gate A0.2 Execution Record
+
+After the separately reviewed A0.1R and foreground-length qualification gates,
+A0.2 executed the frozen stock APC (S0) versus stock APC plus native CPU offload
+(S1) matrix on the pinned NVIDIA A10/vLLM/Qwen testbed.
+
+Attempt 1 is preserved as provenance-invalid because engine-auto-selected GPU KV
+capacity drifted from 3151 to 3157 blocks across runs. Attempt 2 explicitly froze
+3151 blocks in both arms and completed all 90 registered runs as valid
+observations.
+
+All six target/overload cells produced S0 missing-prefix observations. Three were
+registered material full-recompute cells and three were partial-miss cells. S1
+provided attributable external cached tokens for every material miss; no
+material-cell foreground-direction reversal occurred. The pinned connector did
+not expose request-scoped load start/end intervals, so the preregistered
+transfer-overlap-dependent conditions remained disabled.
+
+No registered Stop or Continue condition fired. The final A0.2 decision is the
+experimentally validated `inconclusive` D028 record, not a pass into A1. Week 2
+controller/runtime work therefore remains blocked pending a separate
+stop/narrow/reselect review or a newly preregistered, independently approved
+question. The complete cell table and evidence boundary are in
+[A0.2 results](../../experiments/A0.2-stock-sufficiency/A0.2-stock-sufficiency-results-2026-07-23.md).
 
 ### Week 2: Pinned Three-Path Trace
 

@@ -6,6 +6,15 @@
 > artifact is linked. Engine-independent Phase 0 contracts are the only shipped
 > code at the time of this review.
 
+> **Pinned upstream model.** A0.2 pins vLLM commit
+> `752a3a504485790a2e8491cacbb35c137339ad34`. Its native CPU-offload API is
+> already job-scoped: `OffloadingConnectorMetadata` carries
+> `store_jobs`/`load_jobs` keyed by scheduler-assigned `job_id`; each
+> `TransferJob` carries its originating `req_id`; workers report
+> `completed_jobs`; and the scheduler reduces those reports into one
+> `TransferJobStatus` completion. This document must not model native transfer
+> completion as a `reqs_to_store`/`reqs_to_load` request callback.
+
 ## 1. Design Principle
 
 Separate action selection from mechanism without moving correctness outside the
@@ -41,22 +50,27 @@ and that ordinary requests retain the default vLLM path.
 
 ```mermaid
 flowchart TB
-    A["Agent workload / OpenAI-compatible client"] --> B["vLLM request lifecycle"]
-    B --> C["Tool-wait and resume hooks"]
-    C --> D["LifecycleStateMachine"]
-    D --> E["CostProfiler (CT3)"]
-    D --> F["Action selector: forced / static / Gate-B dynamic"]
-    F --> G["Retain executor"]
-    F --> H["Offload / restore executor"]
-    F --> I["Evict / recompute executor"]
-    G --> J["GPU HBM"]
-    H --> J
-    H --> K["CPU DRAM"]
-    I --> J
-    D --> L["DecisionTrace"]
-    E --> L
-    F --> L
-    L --> M["Replay and evaluation harness"]
+    A["Agent workload / OpenAI-compatible client"] --> B["Logical tool turn"]
+    B --> C["Candidate lifecycle claim: session / turn / epoch"]
+    C --> D["New vLLM request (req_id)"]
+    D --> E["Offloading scheduler: TransferJob(job_id, req_id)"]
+    E --> F["Worker completed_jobs[job_id]"]
+    F --> G["Scheduler TransferJobStatus completion"]
+    G --> H["Lifecycle outcome adapter"]
+    H --> I["LifecycleStateMachine"]
+    I --> J["CostProfiler (CT3)"]
+    I --> K["Action selector: forced / static / Gate-B dynamic"]
+    K --> L["Retain executor"]
+    K --> M["Offload / restore executor"]
+    K --> N["Evict / recompute executor"]
+    L --> O["GPU HBM"]
+    M --> O
+    M --> P["CPU DRAM"]
+    N --> O
+    I --> Q["DecisionTrace"]
+    J --> Q
+    K --> Q
+    Q --> R["Replay and evaluation harness"]
 ```
 
 ## 3. Main Components
@@ -71,16 +85,33 @@ Proposed interface:
 
 ```text
 on_tool_wait(event) -> Decision
-on_resume(event) -> ResumePlan
+submit_resume(event) -> (lifecycle_epoch, req_id)
 on_cancel(event) -> CleanupPlan
-on_transfer_complete(event) -> StateTransition
-on_transfer_failure(event) -> FallbackPlan
+on_transfer_job_complete(job_id, status) -> StateTransition
+on_transfer_job_failure(job_id, reason) -> FallbackPlan
 ```
 
 It does not estimate policy costs or directly move tensors. The exact object
-carrying this state is unresolved until the pinned-vLLM audit; it may be a
-lifecycle claim over compatible prefix references rather than a long-lived
-request object.
+carrying candidate state is a lifecycle claim over compatible prefix references,
+not a long-lived vLLM `Request`. One logical claim may submit more than one
+vLLM request and one request may have multiple store jobs. A native `job_id` is
+therefore an asynchronous-completion correlation key, not the lifecycle identity.
+
+### Identity and Completion Boundary
+
+| Identity / event | Owner | Meaning | Candidate use |
+|---|---|---|---|
+| `session_id`, `turn_id`, `epoch` | ToolGap-KV | Logical agent lifecycle identity | Authority for idempotence, cancellation, and stale-completion fencing |
+| `req_id` | vLLM request | One concrete submission, including a newly submitted resume | Map a submitted resume back to its current lifecycle epoch |
+| `job_id` | Offloading scheduler | One native async store or load | Correlate one native completion with the mapped request; never use it as a session key |
+| `completed_jobs[job_id]` | vLLM workers | Per-worker completion report | Treat as partial evidence only; it is not a completed lifecycle transition |
+| `TransferJobStatus` at pending count zero | Offloading scheduler | Exactly one reduced native transfer completion | The only job-completion point an adapter may turn into an observed store/load outcome |
+
+The candidate adapter must record `(lifecycle_epoch, req_id, job_id, direction)`
+when an observed job is emitted. It may transition the lifecycle state only after
+the scheduler has reduced `completed_jobs` for that job to completion. A late
+job completion whose `(req_id, epoch)` mapping is no longer current is traceable
+but cannot reactivate, complete, or clean up a newer lifecycle claim.
 
 ### CostProfiler
 
@@ -174,12 +205,12 @@ stateDiagram-v2
     TOOL_WAIT --> RETAINED: retain selected
     TOOL_WAIT --> OFFLOAD_PENDING: offload selected
     TOOL_WAIT --> EVICTED: recompute selected
-    OFFLOAD_PENDING --> OFFLOADED: store complete
-    OFFLOAD_PENDING --> EVICTED: store failed / fallback
+    OFFLOAD_PENDING --> OFFLOADED: store job completes
+    OFFLOAD_PENDING --> EVICTED: store job fails / fallback
     RETAINED --> ACTIVE: resume with resident KV
     OFFLOADED --> RESTORE_PENDING: tool result received
-    RESTORE_PENDING --> ACTIVE: restore complete
-    RESTORE_PENDING --> RECOMPUTE_PENDING: restore failed
+    RESTORE_PENDING --> ACTIVE: load job completes
+    RESTORE_PENDING --> RECOMPUTE_PENDING: load job fails
     EVICTED --> RECOMPUTE_PENDING: tool result received
     RECOMPUTE_PENDING --> ACTIVE: prefill complete
     TOOL_WAIT --> CANCELLED: cancel / timeout
@@ -201,8 +232,8 @@ stateDiagram-v2
    attention layout, parallel configuration, and token hash are compatible.
 5. A transfer failure cannot silently produce partial reuse; it falls back to
    recompute or fails the request explicitly.
-6. Cancellation is idempotent and prevents stale transfer completion from
-   resurrecting the request.
+6. Cancellation is idempotent and prevents a stale native `job_id` completion
+   from resurrecting the lifecycle claim or a later resume `req_id`.
 7. Ordinary non-agent requests remain on the default fast path.
 
 ## 6. Cache Identity
@@ -259,6 +290,67 @@ extensions because each adds independent correctness and performance questions.
 | Stale cache identity | Reject reuse and recompute |
 
 ## 9. vLLM Integration Boundary
+
+### Pinned Job-Scoped Offload Contract
+
+The A0.2 pin is a release-line commit rather than a descendant of the `main`
+merge commit for upstream #39186, so merge date alone is not a valid topology
+test. The exact pinned source nevertheless contains the #39186 job-scoped
+contract: `TransferJob`, `store_jobs`/`load_jobs`, `completed_jobs`, and
+`TransferJobStatus`. The architecture is therefore intentionally aligned to
+the pinned API, not to the old request-scoped model.
+
+This distinction changes the ownership boundary:
+
+```text
+ToolGap-KV owns: logical tool lifecycle, epoch, request-to-claim mapping,
+                  job-to-current-epoch correlation, fallback and trace.
+vLLM owns:      job allocation, per-worker completion reduction, block fences,
+                  complete_store/load, refcounts, and D2H/H2D execution.
+```
+
+`request_finished()` is only a request-lifetime event. It cannot be treated as
+proof that every store is complete: a store job can outlive its request and is
+made safe by vLLM's job/block fencing. Conversely, the candidate runtime must
+not call `complete_store`, `complete_load`, or mutate vLLM job state.
+
+### Patch 1 Candidate: Job-Scoped Load-Failure Recovery
+
+D029 is an accepted **audit/admission gate**, not approval to implement a vLLM
+patch. The pin has per-job success completion already, but it has no generic
+job-failure contract:
+
+- synchronous `submit_load()` and `submit_store()` failures assert;
+- asynchronous transfer results assert `transfer_result.success` with the
+  explicit comment that job failures are not supported;
+- `completed_jobs` carries only successful per-worker counts;
+- the generic vLLM scheduler already accepts `invalid_block_ids` and can apply
+  `kv_load_failure_policy="recompute"`, but this Offloading Connector cannot
+  turn a failed job into those block IDs.
+
+Therefore a candidate Patch 1 exists only if the D029 fake-worker admission
+tests prove the missing bridge cannot be supplied by an official extension. Its
+minimal responsibility is **load-path failure recovery**, not completion
+observability:
+
+1. report a typed terminal job outcome across workers, rather than reinterpret
+   `completed_jobs` as a failure counter;
+2. retain enough scheduler-side load destination information to emit precise
+   `invalid_block_ids` for a failed load job;
+3. route the failed request into vLLM's existing recompute/fail policy without
+   crashing the engine;
+4. terminally discard a failed store and remove its `_jobs`, `transfer_jobs`,
+   and `_block_id_to_pending_jobs` bookkeeping, without calling
+   `complete_store`.
+
+The patch must preserve vLLM's own completion reduction, job removal, refcounts,
+and physical block-reuse fence. It must **not** recreate `reqs_to_store`, publish
+a worker-local result before cross-worker reduction, use `request_finished()` as
+a store-complete surrogate, or put ToolGap session/epoch semantics into vLLM.
+ToolGap may consume a separate read-only scheduler-reduced outcome event, but a
+late outcome may affect only its own logical lifecycle trace, never vLLM's job
+state. If this scope cannot remain small and auditable, D024 requires stopping
+or reselecting the runtime branch rather than widening into a scheduler fork.
 
 As of the 2026-07-13 review, vLLM upstream has native CPU offload, a merged/released
 multi-tier framework, and experimental per-request selective offload. Those are
